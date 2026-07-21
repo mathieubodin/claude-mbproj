@@ -1,0 +1,9 @@
+# OS / editor cruft
+.DS_Store
+*.swp
+*~
+
+# Local, non-shared config (never committed)
+*.local
+.env
+.env.*

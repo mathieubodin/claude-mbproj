@@ -1,0 +1,13 @@
+{
+  "name": "claude-mbproj",
+  "owner": { "name": "Mathieu Bodin", "url": "https://github.com/mathieubodin" },
+  "plugins": [
+    {
+      "name": "claude-mbproj",
+      "source": "./",
+      "version": "0.1.0",
+      "description": "Scaffold reusable project tooling via /mbproj-scaffold.",
+      "author": { "name": "Mathieu Bodin" }
+    }
+  ]
+}
