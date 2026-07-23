@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Write an *owned* file: do-not-edit banner + content, byte-identically.
+
+An owned file is one whose full content belongs to mbproj and is rewritten in
+full on every run (spine invariants I2/I7). The banner is rendered in the file's
+comment style; the content is written verbatim, with LF endings and a single
+trailing newline, so repeated runs produce identical bytes.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+import mbproj_common as common
+
+
+def render_owned(target: str | Path, content: str, style: str | None = None) -> str:
+    """Return the exact bytes (as text) an owned file should hold."""
+    if style is None:
+        style = common.style_for(target)
+    banner = common.render_banner(style)
+    body = content if content.endswith("\n") else content + "\n"
+    return f"{banner}\n{body}"
+
+
+def write_owned(target: str | Path, content: str, style: str | None = None) -> str:
+    text = render_owned(target, content, style)
+    common.write_text_atomic(target, text)
+    return text
+
+
+# --- CLI ------------------------------------------------------------------
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="write an owned file with the mbproj banner")
+    parser.add_argument("target", type=Path, help="path of the owned file to write")
+    src = parser.add_mutually_exclusive_group(required=True)
+    src.add_argument("--content-file", type=Path, help="read content from this file")
+    src.add_argument("--stdin", action="store_true", help="read content from stdin")
+    parser.add_argument("--style", choices=("hash", "slash", "html"), default=None)
+    args = parser.parse_args(argv)
+
+    if args.stdin:
+        content = sys.stdin.read()
+    else:
+        content = args.content_file.read_text(encoding="utf-8")
+
+    write_owned(args.target, content, args.style)
+    print(args.target)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

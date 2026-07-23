@@ -7,3 +7,7 @@
 *.local
 .env
 .env.*
+
+# Python engine artifacts
+__pycache__/
+*.pyc
