@@ -75,12 +75,15 @@ project language — there is no language toolchain (`cargo`, `go`, `npm`, …).
 **project-specific** (it served the reference project's OTel collector) and is **not** part
 of any layer.
 
-| Layer         | Owned files (rewritten in full)                                                                                                                | Tools                                        | Depends on   |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------ |
-| `lint_format` | `.claude/rules/{json,makefile,markdown,projects-files,yaml}.md`, `.claude/mbproj/conventions.md`, `mbproj.mk` (build/package/clean/help/lint/check-dev-env), `.markdownlint-cli2.yaml`, `.shellcheckrc` | `markdownlint-cli2`, `jq`, `yq`, `shellcheck` | —            |
-| `guards`      | `prek.toml`, `commitlint.config.js`, `mbproj.mk` (install-hooks)                                                                                | `prek`, `commitlint`                         | `lint_format` |
-| `changelog`   | `cliff.toml`, `mbproj.mk` (changelog)                                                                                                            | `git-cliff`                                  | `guards`     |
-| `agentic`     | `.claude/mbproj/agentic.md` (Agentic Workflow only) + **triggers** the BMAD + compound-engineering install (see below)                          | —                                            | —            |
+- **`lint_format`** (depends on: none) — owned: `.claude/rules/{json,makefile,markdown,projects-files,yaml}.md`,
+  `.claude/mbproj/conventions.md`, `mbproj.mk` (build/package/clean/help/lint/check-dev-env),
+  `.markdownlint-cli2.yaml`, `.shellcheckrc`. Tools: `markdownlint-cli2`, `jq`, `yq`, `shellcheck`.
+- **`guards`** (depends on: `lint_format`) — owned: `prek.toml`, `commitlint.config.js`,
+  `mbproj.mk` (install-hooks). Tools: `prek`, `commitlint`.
+- **`changelog`** (depends on: `guards`) — owned: `cliff.toml`, `mbproj.mk` (changelog).
+  Tools: `git-cliff`.
+- **`agentic`** (independent) — owned: `.claude/mbproj/agentic.md` (Agentic Workflow only);
+  also **triggers** the BMAD + compound-engineering install (see below). Tools: none.
 
 Dependency chain: `lint_format → guards → changelog` (linear); `agentic` is independent.
 `guards` depends on `lint_format` because the `prek` pre-commit hook delegates to
@@ -91,12 +94,12 @@ commits enforced by `commitlint`.
 
 Each layer injects into shared files as follows; contributions are composed (I8):
 
-| Shared file      | Mechanism | Contributions                                                                                     |
-| ---------------- | --------- | ------------------------------------------------------------------------------------------------- |
-| `Makefile`       | I3(a)     | `include mbproj.mk` (once, when any `mbproj.mk`-owning layer is applied).                          |
-| `CLAUDE.md`      | I3(a)     | one `@import` per applied prose layer: `lint_format` ⇒ `conventions.md`; `agentic` ⇒ `agentic.md`. |
-| `SETUP_ENV.md`   | I3(b)     | tool install sections for the applied layers' tools (composed).                                    |
-| `.gitignore`     | I3(b)     | mbproj ignore lines, regenerated in full (generic defaults ∪ layer-contributed ∪ `vendored_dirs`). |
+- **`Makefile`** — I3(a): `include mbproj.mk` (once, when any `mbproj.mk`-owning layer is applied).
+- **`CLAUDE.md`** — I3(a): one `@import` per applied prose layer
+  (`lint_format` ⇒ `conventions.md`; `agentic` ⇒ `agentic.md`).
+- **`SETUP_ENV.md`** — I3(b): tool install sections for the applied layers' tools (composed).
+- **`.gitignore`** — I3(b): mbproj ignore lines, regenerated in full
+  (generic defaults ∪ layer-contributed ∪ `vendored_dirs`).
 
 ### `agentic` — different nature (needs a spike)
 
@@ -141,7 +144,7 @@ vendored_dirs = ["vendor", "third_party"]
 
 ## Parameters
 
-- **Tool sets** — fixed per layer (see the layers table). Not detected, not asked.
+- **Tool sets** — fixed per layer (see the layer list). Not detected, not asked.
 - **`project_name`** — detected (git remote basename, else directory name), then confirmed.
 - **`vendored_dirs`** — asked (cannot be reliably detected); feeds the composed excludes
   (I8).

@@ -101,9 +101,13 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     # shared: Makefile include (a)
     shared.ensure_anchor_lines(repo / "Makefile", ["include mbproj.mk"], r"^\s*include\s+mbproj\.mk\s*$")
 
-    # shared: CLAUDE.md imports (a)
+    # shared: CLAUDE.md imports (a) — seed a title first so a fresh file has an H1
+    claude = repo / "CLAUDE.md"
+    if not claude.exists():
+        pname = state["params"]["project_name"] or repo.name
+        common.write_text_atomic(claude, f"# {pname}\n\nGuidance for AI agents working in this repository.\n")
     imports = [f"@{p}" for n in applied for p in LAYERS[n]["claude_imports"]]
-    shared.ensure_anchor_lines(repo / "CLAUDE.md", imports, r"^@\.claude/mbproj/")
+    shared.ensure_anchor_lines(claude, imports, r"^@\.claude/mbproj/")
 
     # shared: SETUP_ENV.md tool sections (b)
     sections = [
