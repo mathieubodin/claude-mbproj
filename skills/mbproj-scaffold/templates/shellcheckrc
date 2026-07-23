@@ -1,0 +1,8 @@
+# ShellCheck configuration — project lint policy, kept explicit and versioned
+# (mirrors .markdownlint-cli2.yaml). Applied to every *.sh linted by `make lint`.
+
+# Opt into all optional/style checks (strict).
+enable=all
+
+# Allow ShellCheck to follow `source` / `.`-included files during analysis.
+external-sources=true

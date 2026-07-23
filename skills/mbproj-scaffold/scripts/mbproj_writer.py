@@ -16,11 +16,22 @@ import mbproj_common as common
 
 
 def render_owned(target: str | Path, content: str, style: str | None = None) -> str:
-    """Return the exact bytes (as text) an owned file should hold."""
+    """Return the exact bytes (as text) an owned file should hold.
+
+    A leading YAML frontmatter block (`---` ... `---`) must stay on line 1 for Claude
+    Code to parse a rule's `paths`, so the banner is inserted *after* it.
+    """
     if style is None:
         style = common.style_for(target)
     banner = common.render_banner(style)
     body = content if content.endswith("\n") else content + "\n"
+    if body.startswith("---\n"):
+        close = body.find("\n---\n", 4)
+        if close != -1:
+            split = close + len("\n---\n")
+            frontmatter = body[:split]
+            rest = body[split:].lstrip("\n")
+            return f"{frontmatter}\n{banner}\n{rest}" if rest else f"{frontmatter}\n{banner}"
     return f"{banner}\n{body}"
 
 
