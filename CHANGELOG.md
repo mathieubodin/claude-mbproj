@@ -13,6 +13,12 @@ history — do not edit by hand.
 - *(skill)* U3 — lint_format layer content + composition (I8)
 - U4 — dogfood lint_format on this repo (self-scaffold)
 - *(skill)* U5 — guards layer (prek + commitlint + install-hooks)
+- *(skill)* U6 — changelog layer (git-cliff)
+- *(skill)* U7 — agentic layer (BMAD + compound-engineering)
+
+### 🐛 Bug Fixes
+
+- *(skill)* Scope agentic lint exclude to .claude/skills/bmad-* only
 
 ### 📚 Documentation
 
