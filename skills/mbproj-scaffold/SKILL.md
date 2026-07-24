@@ -42,10 +42,41 @@ Scripts in `$SKILL_DIR/scripts/`:
    `vendored_dirs` (ask the user). Persist with the `set-param` subcommand.
 4. **Present the current state** and let the user pick which layers to add or update, enforcing
    the dependency chain `lint_format → guards → changelog` (`agentic` is independent).
-5. **Apply the selected layers** — *handled by the per-layer logic (forthcoming units).*
-6. **Write the manifest back** — `set-layer` / `set-param` subcommands, or pipe an updated JSON
-   state to `mbproj_manifest.py write <repo>`.
+5. **Apply the selected layers** — run the composition engine, which writes every owned file
+   and shared-file contribution and updates the manifest:
 
-> Status: v0.1.0 — this unit (U1) delivers the engine core: manifest read/write, the owned-file
-> writer, and the banner. The I3 shared-file primitives, the `lint_format` content, and
-> composition land in later units.
+   ```bash
+   python3 "$SKILL_DIR/scripts/mbproj_apply.py" <repo> \
+     --layer <name> [--layer <name> ...] \
+     --project-name <name> [--vendored-dir <dir> ...]
+   ```
+
+   Dependencies are enforced (`lint_format → guards → changelog`; `agentic` is independent).
+6. **Install the agentic tooling** *(only if the `agentic` layer was applied)* — run the guarded
+   steps in the next section.
+
+## Agentic layer — tooling install
+
+When the `agentic` layer is applied, install its tooling after the engine has written the
+files. Each step is guarded so a re-run is a no-op. Requires **Node.js 20+**.
+
+Install compound-engineering at **project scope** (so teammates get it too):
+
+```bash
+if ! claude plugin marketplace list 2>/dev/null | grep -q compound-engineering-plugin; then
+  claude plugin marketplace add EveryInc/compound-engineering-plugin --scope project
+fi
+if ! claude plugin list 2>/dev/null | grep -q '^compound-engineering'; then
+  claude plugin install compound-engineering@compound-engineering-plugin --scope project
+fi
+```
+
+Install BMAD-Method (the `bmm` module, Claude Code integration) if not already present:
+
+```bash
+if [ ! -d "<repo>/_bmad" ]; then
+  npx --yes bmad-method install --directory "<repo>" --modules bmm --tools claude-code --yes
+fi
+```
+
+> Status: v0.1.0 — all four layers are implemented (lint_format, guards, changelog, agentic).

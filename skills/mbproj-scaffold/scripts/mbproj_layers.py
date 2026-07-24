@@ -157,3 +157,15 @@ LAYERS["changelog"].update(
         "check_targets": ["_check_git_cliff"],
     }
 )
+
+# agentic: deterministic bits only (agentic.md + imports + gitignore + lint excludes).
+# The BMAD + compound-engineering installs are orchestrated by SKILL.md, not this engine.
+LAYERS["agentic"].update(
+    {
+        "owned": [("agentic.md", ".claude/mbproj/agentic.md")],
+        "claude_imports": [".claude/mbproj/agentic.md"],
+        "setup_env_sections": ["agentic-tooling"],
+        "gitignore_lines": ["_bmad/**/*.user.toml", "_bmad/**/*.user.yaml"],
+        "exclude_dirs": ["_bmad", "_bmad-output", ".claude/skills"],
+    }
+)
