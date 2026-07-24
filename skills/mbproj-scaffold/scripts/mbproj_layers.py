@@ -135,3 +135,25 @@ LAYERS["guards"].update(
         "owns_prek_config": True,
     }
 )
+
+
+_CHANGELOG_MK = _mk(
+    """\
+changelog: _check_git_cliff ## Regenerate CHANGELOG.md from the git history (git-cliff)
+<TAB>@git-cliff -o CHANGELOG.md
+<TAB>@echo "OK changelog"
+
+_check_git_cliff:
+<TAB>@command -v git-cliff >/dev/null 2>&1 || { echo "git-cliff not found - see SETUP_ENV.md#git-cliff"; exit 1; }
+"""
+)
+
+LAYERS["changelog"].update(
+    {
+        "owned": [("cliff.toml", "cliff.toml")],
+        "setup_env_sections": ["git-cliff"],
+        "mk": _CHANGELOG_MK,
+        "main_targets": ["changelog"],
+        "check_targets": ["_check_git_cliff"],
+    }
+)
