@@ -55,8 +55,14 @@ scaffold:
 
 ## Status
 
-Early development (v0.1.0). The design spine is being defined and the `mbproj-scaffold`
-skill is not yet implemented.
+v0.1.0 — all four layers are implemented and dogfooded on this repository (`make lint`,
+`make check-dev-env`, `make changelog`, and git guards all run here).
+
+## Documentation
+
+- [`docs/spine.md`](docs/spine.md) — the design spine (invariants, layers, manifest).
+- [`SETUP_ENV.md`](SETUP_ENV.md) — installing the tools the generated `make` targets need.
+- [`CHANGELOG.md`](CHANGELOG.md) — generated release history.
 
 ## License
 
