@@ -166,6 +166,7 @@ LAYERS["agentic"].update(
         "claude_imports": [".claude/mbproj/agentic.md"],
         "setup_env_sections": ["agentic-tooling"],
         "gitignore_lines": ["_bmad/**/*.user.toml", "_bmad/**/*.user.yaml"],
-        "exclude_dirs": ["_bmad", "_bmad-output", ".claude/skills"],
+        # Exclude only BMAD's vendored skills, not the project's own .claude/skills/*.
+        "exclude_dirs": ["_bmad", "_bmad-output", ".claude/skills/bmad-*"],
     }
 )
