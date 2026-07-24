@@ -6,7 +6,7 @@ plugin_version = "0.1.0"
 
 [layers]
 lint_format = { applied = true, version = "0.1.0" }
-guards = { applied = false }
+guards = { applied = true, version = "0.1.0" }
 changelog = { applied = false }
 agentic = { applied = false }
 

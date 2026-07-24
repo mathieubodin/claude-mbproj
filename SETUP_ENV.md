@@ -79,4 +79,51 @@ Verify:
 ```bash
 shellcheck --version
 ```
+
+## commitlint
+
+Validates commit messages against Conventional Commits, run by prek at the
+`commit-msg` stage. Node-based (like `markdownlint-cli2`) — install Node.js first
+(see [markdownlint-cli2](#markdownlint-cli2)), then:
+
+```bash
+npm install -g @commitlint/cli @commitlint/config-conventional
+```
+
+The rules live in the versioned `commitlint.config.js`.
+
+Verify:
+
+```bash
+commitlint --version
+```
+
+## prek
+
+Fast, standalone git-hook manager (Rust, no Python). Install the prebuilt binary
+(no build step); other options at <https://github.com/j178/prek#installation>:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh
+```
+
+Verify:
+
+```bash
+prek --version
+```
+
+## Git hooks
+
+Hooks are declared in `prek.toml`: the `pre-commit` stage runs `make lint`, the
+`commit-msg` stage runs `commitlint`. Activate the shims once per clone:
+
+```bash
+make install-hooks
+```
+
+`make install-hooks` also works when a global `core.hooksPath` is set (e.g. a
+token-tracking hooks directory): it scopes the path to `.git/hooks` for the install,
+then restores it so any global delegation keeps running.
 <!-- <<< mbproj:managed <<< -->

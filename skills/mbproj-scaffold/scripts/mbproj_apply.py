@@ -72,6 +72,38 @@ def build_markdownlint(state: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_prek(state: dict) -> str:
+    globs = ", ".join(f'"{d}/**"' for d in compose_exclude_dirs(state))
+    return (
+        "# prek (https://github.com/j178/prek) - Rust, standalone, no Python.\n"
+        "# Content linting is owned by the Makefile: the local `lint` hook delegates to\n"
+        "# `make lint`. The builtin repo only adds fast hygiene hooks. Activate once with\n"
+        "# `make install-hooks` (see SETUP_ENV.md#git-hooks).\n"
+        "\n"
+        f"exclude = {{ glob = [{globs}] }}\n"
+        "\n"
+        "# Run hooks only at the pre-commit stage by default, so hygiene + `make lint` do\n"
+        '# not also run at commit-msg. commitlint overrides this with stages = ["commit-msg"].\n'
+        'default_stages = ["pre-commit"]\n'
+        "\n"
+        "[[repos]]\n"
+        'repo = "builtin"\n'
+        "hooks = [\n"
+        '    { id = "trailing-whitespace" },\n'
+        '    { id = "end-of-file-fixer", args = ["--fix"] },\n'
+        '    { id = "mixed-line-ending", args = ["--fix", "lf"] },\n'
+        '    { id = "check-merge-conflict" },\n'
+        "]\n"
+        "\n"
+        "[[repos]]\n"
+        'repo = "local"\n'
+        "hooks = [\n"
+        '    { id = "lint", name = "make lint", entry = "make lint", language = "system", shell = "bash", pass_filenames = false },\n'
+        '    { id = "commitlint", name = "commitlint", entry = "commitlint --edit", language = "system", stages = ["commit-msg"], pass_filenames = false },\n'
+        "]\n"
+    )
+
+
 def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     state = manifest.read(repo)
     if project_name is not None:
@@ -96,6 +128,8 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     # composed owned files
     if any(LAYERS[n]["owns_markdownlint_config"] for n in applied):
         writer.write_owned(repo / ".markdownlint-cli2.yaml", build_markdownlint(state), style="hash")
+    if any(LAYERS[n]["owns_prek_config"] for n in applied):
+        writer.write_owned(repo / "prek.toml", build_prek(state), style="hash")
     writer.write_owned(repo / "mbproj.mk", build_mk(state), style="hash")
 
     # shared: Makefile include (a)
