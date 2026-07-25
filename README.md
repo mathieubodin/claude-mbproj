@@ -55,8 +55,10 @@ scaffold:
 
 ## Status
 
-v0.1.0 — all four layers are implemented and dogfooded on this repository (`make lint`,
-`make check-dev-env`, `make changelog`, and git guards all run here).
+v0.1.0 — all four layers are implemented. The lint/format, guards, and changelog layers are
+dogfooded on this repository: `make lint`, `make check-dev-env`, `make changelog`, and the
+git hooks all run here. The agentic layer is deliberately not applied here (this repo is a
+plugin, not a BMAD-developed project); it was verified end to end in a throwaway repo.
 
 ## Documentation
 

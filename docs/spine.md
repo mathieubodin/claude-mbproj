@@ -108,14 +108,14 @@ Each layer injects into shared files as follows; contributions are composed (I8)
 - **`.gitignore`** — I3(b): mbproj ignore lines, regenerated in full
   (generic defaults ∪ layer-contributed ∪ `vendored_dirs`).
 
-### `agentic` — different nature (needs a spike)
+### `agentic` — different nature
 
 The other three layers write configuration. `agentic` instead **orchestrates external
-installs** (the compound-engineering marketplace plugin and the BMAD assets — submodule or
-marketplace) and writes only `.claude/mbproj/agentic.md`. Open questions to resolve in a
-dedicated story with a spike: how the install is triggered, idempotency when already
-installed, and submodule vs marketplace. It also encodes a **Mathieu-specific** workflow
-(BMAD + CE), so it is "generic-to-Mathieu" rather than universal.
+installs** and writes only `.claude/mbproj/agentic.md`. The spike settled the open questions:
+compound-engineering installs through the `claude plugin` CLI at project scope, BMAD through
+`npx bmad-method install` (no submodule), and both steps are guarded so a re-run is a no-op.
+It also encodes a **Mathieu-specific** workflow (BMAD + CE), so it is "generic-to-Mathieu"
+rather than universal.
 
 ## Manifest
 

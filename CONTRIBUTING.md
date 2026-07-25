@@ -79,6 +79,12 @@ When touching a shared-file mechanism, also verify against a repo that already h
 `Makefile`, `CLAUDE.md`, `.gitignore`, or `SETUP_ENV.md`: project-authored content must survive
 untouched, and obsolete mbproj lines must disappear rather than accumulate.
 
+Neither test above executes the shell guards embedded in `SKILL.md` — that surface is how a
+broken guard once shipped. When you change one, extract the literal line from the file and run
+*that* against the tool's real output; a retyped variant tests the retyping, not the artifact.
+See
+[`docs/solutions/developer-experience/diagnosing-installed-but-broken-tooling.md`](docs/solutions/developer-experience/diagnosing-installed-but-broken-tooling.md).
+
 ## Adding or changing a layer
 
 1. Put generic file content in `skills/mbproj-scaffold/templates/`, never inline in Python.
