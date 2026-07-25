@@ -19,11 +19,16 @@ history — do not edit by hand.
 ### 🐛 Bug Fixes
 
 - *(skill)* Scope agentic lint exclude to .claude/skills/bmad-* only
+- *(skill)* Always emit the help target so make works without lint_format
 
 ### 📚 Documentation
 
 - Add design spine for mbproj-scaffold
 - Revise design spine after code-grounded review
+- *(changelog)* Regenerate to include U4-U7 and the agentic fix
+- *(readme)* Update status to reflect the completed v1
+- Add CONTRIBUTING.md and document the Python prerequisite
+- Sync the spine with the implementation and name the marketplace
 
 ### ⚙️ Miscellaneous Tasks
 
