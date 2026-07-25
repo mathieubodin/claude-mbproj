@@ -33,9 +33,6 @@ clean: ## Remove build artifacts
 <TAB>@rm -rf dist/ 2>/dev/null || true
 <TAB>@echo "OK clean"
 
-help: ## Display all available targets
-<TAB>@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*## "}{printf "  %-20s %s\\n", $$1, $$2}'
-
 lint: _lint_markdown _lint_json _lint_yaml _lint_shell ## Lint all sources (Markdown, JSON, YAML, Shell)
 <TAB>@echo "OK lint"
 
@@ -101,7 +98,7 @@ LAYERS["lint_format"].update(
         "claude_imports": [".claude/mbproj/conventions.md"],
         "setup_env_sections": ["markdownlint-cli2", "jq", "yq", "shellcheck"],
         "mk": _LINT_FORMAT_MK,
-        "main_targets": ["build", "clean", "help", "lint", "package"],
+        "main_targets": ["build", "clean", "lint", "package"],
         "check_targets": ["_check_markdownlint", "_check_jq", "_check_yq", "_check_shellcheck"],
         "owns_markdownlint_config": True,
     }

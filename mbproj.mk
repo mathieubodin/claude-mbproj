@@ -9,15 +9,15 @@ _MBPROJ_EXCLUDES := ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./dis
 check-dev-env: _check_markdownlint _check_jq _check_yq _check_shellcheck _check_prek _check_commitlint _check_git_cliff ## Verify required tools are installed
 	@echo "OK check-dev-env"
 
+help: ## Display all available targets
+	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*## "}{printf "  %-20s %s\n", $$1, $$2}'
+
 build: ## Build project artifacts (currently a no-op placeholder)
 	@echo "OK build"
 
 clean: ## Remove build artifacts
 	@rm -rf dist/ 2>/dev/null || true
 	@echo "OK clean"
-
-help: ## Display all available targets
-	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*## "}{printf "  %-20s %s\n", $$1, $$2}'
 
 lint: _lint_markdown _lint_json _lint_yaml _lint_shell ## Lint all sources (Markdown, JSON, YAML, Shell)
 	@echo "OK lint"

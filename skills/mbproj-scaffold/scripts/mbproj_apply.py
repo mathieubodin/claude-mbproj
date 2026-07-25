@@ -39,7 +39,9 @@ def compose_exclude_dirs(state: dict) -> list[str]:
 
 def build_mk(state: dict) -> str:
     applied = _applied(state)
-    main = sorted({"check-dev-env", *(t for n in applied for t in LAYERS[n]["main_targets"])})
+    # `check-dev-env` and `help` ship with every layer set: `help` backs .DEFAULT_GOAL, so it
+    # must exist even when the layer that used to carry it (lint_format) is not applied.
+    main = sorted({"check-dev-env", "help", *(t for n in applied for t in LAYERS[n]["main_targets"])})
     checks = [t for n in applied for t in LAYERS[n]["check_targets"]]
     excludes = " ".join(f'! -path "./{d}/*"' for d in compose_exclude_dirs(state))
     check_prereq = (" " + " ".join(checks)) if checks else ""
@@ -51,6 +53,10 @@ def build_mk(state: dict) -> str:
         "",
         "check-dev-env:" + check_prereq + " ## Verify required tools are installed",
         "\t@echo \"OK check-dev-env\"",
+        "",
+        "help: ## Display all available targets",
+        "\t@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sort"
+        " | awk 'BEGIN{FS=\":.*## \"}{printf \"  %-20s %s\\n\", $$1, $$2}'",
     ]
     for name in applied:
         if LAYERS[name]["mk"]:
