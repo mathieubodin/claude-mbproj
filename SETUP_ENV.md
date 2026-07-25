@@ -148,3 +148,19 @@ Verify:
 git-cliff --version
 ```
 <!-- <<< mbproj:managed <<< -->
+
+## Python
+
+Only needed to work **on this plugin** (the scaffolding engine); projects scaffolded by it do
+not need Python. Version **3.11 or newer** is required — the engine reads the manifest with
+the standard-library `tomllib` module, added in 3.11.
+
+Most systems ship a recent Python 3; official installers for any OS are at
+<https://www.python.org/downloads/>. Shortcuts: `sudo apt-get install python3`
+(Debian/Ubuntu) or `brew install python` (macOS).
+
+Verify:
+
+```bash
+python3 --version
+```

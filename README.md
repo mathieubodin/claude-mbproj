@@ -60,6 +60,7 @@ v0.1.0 — all four layers are implemented and dogfooded on this repository (`ma
 
 ## Documentation
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — working on the plugin itself.
 - [`docs/spine.md`](docs/spine.md) — the design spine (invariants, layers, manifest).
 - [`SETUP_ENV.md`](SETUP_ENV.md) — installing the tools the generated `make` targets need.
 - [`CHANGELOG.md`](CHANGELOG.md) — generated release history.
