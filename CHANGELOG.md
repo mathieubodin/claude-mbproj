@@ -20,6 +20,7 @@ history — do not edit by hand.
 
 - *(skill)* Scope agentic lint exclude to .claude/skills/bmad-* only
 - *(skill)* Always emit the help target so make works without lint_format
+- *(skill)* Make the compound-engineering install guard actually match
 
 ### 📚 Documentation
 
@@ -29,6 +30,8 @@ history — do not edit by hand.
 - *(readme)* Update status to reflect the completed v1
 - Add CONTRIBUTING.md and document the Python prerequisite
 - Sync the spine with the implementation and name the marketplace
+- *(changelog)* Regenerate after the v1 review pass
+- *(solutions)* Capture the installed-but-broken tooling diagnosis
 
 ### ⚙️ Miscellaneous Tasks
 
