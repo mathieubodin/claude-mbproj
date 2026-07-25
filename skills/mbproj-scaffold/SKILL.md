@@ -63,17 +63,20 @@ files. Each step is guarded so a re-run is a no-op. Requires **Node.js 20+**.
 Install compound-engineering at **project scope** (so teammates get it too):
 
 ```bash
-if ! claude plugin marketplace list 2>/dev/null | grep -q compound-engineering-plugin; then
+if ! grep -q '"compound-engineering-plugin"' .claude/settings.json 2>/dev/null; then
   claude plugin marketplace add EveryInc/compound-engineering-plugin --scope project
 fi
-if ! claude plugin list 2>/dev/null | grep -q 'compound-engineering@compound-engineering-plugin'; then
+if ! grep -q 'compound-engineering@compound-engineering-plugin' .claude/settings.json 2>/dev/null; then
   claude plugin install compound-engineering@compound-engineering-plugin --scope project
 fi
 ```
 
-Match the plugin id anywhere on the line — `claude plugin list` indents each entry and prefixes
-it with a marker, so an anchored `^compound-engineering` never matches and the install would
-re-run on every pass.
+Guard on `.claude/settings.json` — the file `--scope project` writes — and **not** on
+`claude plugin list`. The listing is scope-blind: it reports a plugin the developer already has
+at *user* scope, so the guard would skip and the project would never declare it, silently
+defeating the point of project scope (teammates cloning the repo get the tooling). Grep the
+project file instead, and match the plugin id without a start-of-line anchor: the listing
+indents its entries, so `^compound-engineering` never matches either.
 
 An already-installed plugin can still be **disabled**, in which case its skills do not load.
 Check the `Status:` line of `claude plugin list` and enable it if needed:
