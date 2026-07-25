@@ -66,9 +66,20 @@ Install compound-engineering at **project scope** (so teammates get it too):
 if ! claude plugin marketplace list 2>/dev/null | grep -q compound-engineering-plugin; then
   claude plugin marketplace add EveryInc/compound-engineering-plugin --scope project
 fi
-if ! claude plugin list 2>/dev/null | grep -q '^compound-engineering'; then
+if ! claude plugin list 2>/dev/null | grep -q 'compound-engineering@compound-engineering-plugin'; then
   claude plugin install compound-engineering@compound-engineering-plugin --scope project
 fi
+```
+
+Match the plugin id anywhere on the line — `claude plugin list` indents each entry and prefixes
+it with a marker, so an anchored `^compound-engineering` never matches and the install would
+re-run on every pass.
+
+An already-installed plugin can still be **disabled**, in which case its skills do not load.
+Check the `Status:` line of `claude plugin list` and enable it if needed:
+
+```bash
+claude plugin enable compound-engineering@compound-engineering-plugin
 ```
 
 Install BMAD-Method (the `bmm` module, Claude Code integration) if not already present:

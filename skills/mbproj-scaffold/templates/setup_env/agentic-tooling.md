@@ -18,3 +18,10 @@ npx --yes bmad-method install --directory . --modules bmm --tools claude-code --
 ```
 
 To upgrade BMAD later, re-run the `npx bmad-method install` command.
+
+If the compound-engineering skills do not appear, the plugin may be installed but disabled —
+check the `Status:` line of `claude plugin list`, then:
+
+```bash
+claude plugin enable compound-engineering@compound-engineering-plugin
+```
