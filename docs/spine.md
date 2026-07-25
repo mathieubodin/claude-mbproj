@@ -41,8 +41,10 @@ update the tooling, never to run it.
     - `CLAUDE.md` → one `@import` line **per applied layer** that carries prose
       (`@.claude/mbproj/conventions.md`, `@.claude/mbproj/agentic.md`).
   - **(b) Delimited owned block, regenerated in full** — when no indirection exists, mbproj
-    owns a region delimited by `# >>> mbproj:managed >>>` … `# <<< mbproj:managed <<<`,
-    **regenerated integrally on every run**; content outside the delimiters is never touched.
+    owns a region delimited by `# >>> mbproj:managed (do not edit) >>>` …
+    `# <<< mbproj:managed <<<` (the comment prefix follows the file's syntax — `<!-- … -->`
+    in Markdown), **regenerated integrally on every run**; content outside the delimiters is
+    never touched.
     - `.gitignore` → git has no include mechanism.
     - `SETUP_ENV.md` → the `_check_*` fix messages reference `SETUP_ENV.md#<tool>` anchors, so
       the generic tool sections **must** live inside the file (indirection would break the
@@ -64,9 +66,11 @@ update the tooling, never to run it.
   blocks is a function of the applied layers and parameters:
   - `check-dev-env` aggregates **only** the tool checks of the applied layers.
   - `SETUP_ENV.md` managed block holds **only** the tool sections of the applied layers.
-  - Lint/hook excludes = generic defaults (`.git`, `.idea`, `.vscode`, `dist`) ∪
-    layer-contributed (agentic ⇒ `_bmad`, `_bmad-output`, `.claude/skills`) ∪ the
-    `vendored_dirs` parameter.
+  - Lint/hook excludes = generic defaults (`.git`, `node_modules`, `dist`, `.idea`,
+    `.vscode`) ∪ layer-contributed (agentic ⇒ `_bmad`, `_bmad-output`,
+    `.claude/skills/bmad-*`) ∪ the `vendored_dirs` parameter. Layer excludes stay **narrow**:
+    `.claude/skills/bmad-*` targets BMAD's vendored skills only, so a project's own skills
+    keep being linted.
 
 ## Layers
 
@@ -76,7 +80,7 @@ project language — there is no language toolchain (`cargo`, `go`, `npm`, …).
 of any layer.
 
 - **`lint_format`** (depends on: none) — owned: `.claude/rules/{json,makefile,markdown,projects-files,yaml}.md`,
-  `.claude/mbproj/conventions.md`, `mbproj.mk` (build/package/clean/help/lint/check-dev-env),
+  `.claude/mbproj/conventions.md`, `mbproj.mk` (build/package/clean/lint),
   `.markdownlint-cli2.yaml`, `.shellcheckrc`. Tools: `markdownlint-cli2`, `jq`, `yq`, `shellcheck`.
 - **`guards`** (depends on: `lint_format`) — owned: `prek.toml`, `commitlint.config.js`,
   `mbproj.mk` (install-hooks). Tools: `prek`, `commitlint`.
@@ -84,6 +88,9 @@ of any layer.
   Tools: `git-cliff`.
 - **`agentic`** (independent) — owned: `.claude/mbproj/agentic.md` (Agentic Workflow only);
   also **triggers** the BMAD + compound-engineering install (see below). Tools: none.
+
+`mbproj.mk` always carries `check-dev-env` and `help`, whichever layers are applied — `help`
+backs `.DEFAULT_GOAL`, so it must exist even when `lint_format` is not applied.
 
 Dependency chain: `lint_format → guards → changelog` (linear); `agentic` is independent.
 `guards` depends on `lint_format` because the `prek` pre-commit hook delegates to

@@ -1,6 +1,9 @@
 {
   "name": "claude-mbproj",
   "owner": { "name": "Mathieu Bodin", "url": "https://github.com/mathieubodin" },
+  "metadata": {
+    "description": "Marketplace for claude-mbproj — reusable project tooling scaffolding."
+  },
   "plugins": [
     {
       "name": "claude-mbproj",
