@@ -173,7 +173,29 @@ def build_prek(state: dict) -> str:
     )
 
 
-def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
+def owned_plan(state: dict) -> dict[str, str]:
+    """Every file mbproj owns for this state, mapped to the content it would hold.
+
+    Single source of truth: `apply` writes exactly what this returns and the preflight
+    reports on the same set, so a layer gaining an owned file cannot be written by one and
+    missed by the other. It excludes `.config/mbproj.toml`, which is mbproj's own state
+    rather than a project file it takes over.
+    """
+    applied = _applied(state)
+    plan: dict[str, str] = {}
+    for name in applied:
+        for tpl, dest in LAYERS[name]["owned"]:
+            plan[dest] = (TEMPLATES_DIR / tpl).read_text(encoding="utf-8")
+    if any(LAYERS[n]["owns_markdownlint_config"] for n in applied):
+        plan[".markdownlint-cli2.yaml"] = build_markdownlint(state)
+    if any(LAYERS[n]["owns_prek_config"] for n in applied):
+        plan["prek.toml"] = build_prek(state)
+    plan["mbproj.mk"] = build_mk(state)
+    return plan
+
+
+def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
+    """The manifest state that applying these layers would produce. Writes nothing."""
     state = manifest.read(repo)
     # The manifest keeps the version it was written with, so an upgrade would otherwise
     # freeze it at the first install and every layer would keep re-recording that stale
@@ -193,20 +215,15 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
                 raise SystemExit(f"error: layer {name!r} requires {dep!r} to be applied first")
         state["layers"][name] = {"applied": True, "version": state["plugin_version"]}
 
+    return state
+
+
+def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
+    state = plan_state(repo, target_layers, project_name, vendored)
     applied = _applied(state)
 
-    # owned files (verbatim templates + banner)
-    for name in applied:
-        for tpl, dest in LAYERS[name]["owned"]:
-            content = (TEMPLATES_DIR / tpl).read_text(encoding="utf-8")
-            writer.write_owned(repo / dest, content)
-
-    # composed owned files
-    if any(LAYERS[n]["owns_markdownlint_config"] for n in applied):
-        writer.write_owned(repo / ".markdownlint-cli2.yaml", build_markdownlint(state), style="hash")
-    if any(LAYERS[n]["owns_prek_config"] for n in applied):
-        writer.write_owned(repo / "prek.toml", build_prek(state), style="hash")
-    writer.write_owned(repo / "mbproj.mk", build_mk(state), style="hash")
+    for dest, content in owned_plan(state).items():
+        writer.write_owned(repo / dest, content)
 
     # shared: Makefile include (a) — placed FIRST so a project that gives a generic target
     # its own recipe wins; make lets the last recipe win, so an include placed last would
