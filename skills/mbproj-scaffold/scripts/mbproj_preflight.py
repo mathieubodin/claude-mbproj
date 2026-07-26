@@ -372,16 +372,18 @@ def render(result: dict) -> str:
             f"{result['shared_finding_count']} finding(s) in shared files. Nothing is lost "
             "there — mbproj adds to them — but the project would carry the same thing twice."
         )
-        # What "twice" costs differs per file, and lumping the three together undersells the
-        # first: a duplicated tool section is not a matter of taste, it turns the generated
-        # lint red (MD024) — the very failure this scaffolder is meant not to produce.
+        # What "twice" costs is a property of the file, not of the status: `duplicate` covers
+        # both a tool section, which turns the generated lint red, and an ignore line, which
+        # costs nothing at all. Grading by status put the two under the harsher of the two
+        # consequences and claimed one that measurement does not support.
         consequences = {
-            DUPLICATE: "duplicated sections and ignore lines: `make lint` fails on them (MD024)",
-            COLLISION: "colliding targets: make warns, and the project's recipe wins (by design)",
-            REVIEW: "nominated headings: prose only you can compare — purely editorial",
+            "SETUP_ENV.md": "duplicated tool sections: `make lint` fails on them (MD024)",
+            "Makefile": "colliding targets: make warns, and the project's recipe wins (by design)",
+            ".gitignore": "restated ignore lines: redundant only — git and the lint both shrug",
+            "CLAUDE.md": "nominated headings: prose only you can compare — purely editorial",
         }
-        seen = {r["status"] for r in result["shared"]}
-        lines += [f"  - {text}" for status, text in consequences.items() if status in seen]
+        seen = {r["path"] for r in result["shared"] if r["findings"]}
+        lines += [f"  - {text}" for path, text in consequences.items() if path in seen]
         lines.append("Removing what is superseded is an editorial call, so it is left to you.")
     if not (result["conflict_count"] or result["blocked_count"]):
         lines.append("No hand-written file would be overwritten.")
