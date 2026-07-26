@@ -78,9 +78,14 @@ SHARED_FINDINGS = (DUPLICATE, COLLISION, REVIEW)
 
 UNREADABLE = "unreadable"  # a shared file applying cannot read, so applying stops there
 
-_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+# Up to three *spaces* of indent, never a tab: in CommonMark a leading tab opens an indented
+# code block, so `\s` here would read a fenced-looking line inside a code sample as a real
+# fence — and everything after it as fenced-out.
+_FENCE = re.compile(r"^[ ]{0,3}(`{3,}|~{3,})")
 # ATX headings, closing hashes stripped: `## jq ##` is the same heading as `## jq`.
-_HEADING = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
+_HEADING = re.compile(r"^[ ]{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
+# The underline of a setext heading — `jq` over `--` is an H2, and carries the same anchor.
+_SETEXT = re.compile(r"^[ ]{0,3}(=+|-+)[ \t]*$")
 # An assignment, in every flavour make accepts. Recognised first and skipped, so `VAR ::= x`
 # is never mistaken for a rule on a target named VAR.
 _ASSIGN = re.compile(r"^\s*[^:=#]+\s*(?::{1,3}=|[?+!]=)")
@@ -117,18 +122,40 @@ def _make_targets(text: str) -> set[str]:
     kept — pattern rules (`%.o`), variable references and `.PHONY`-style dot-directives name
     nothing `mbproj.mk` defines.
 
-    Not resolved: targets a third-party `include` brings in. Following those means resolving
-    variabled paths and optional includes, which reads more of a project's build than a
-    report is entitled to guess at; a target defined elsewhere is therefore missed, not
-    misreported.
+    Two things are read literally rather than evaluated, and both are deliberate. Targets a
+    third-party `include` brings in are not resolved — beyond the cost of following variabled
+    and optional includes, an adopted repo's Makefile is often just `include mbproj.mk`, so
+    resolving it would report every generic target as colliding with itself. And a rule
+    guarded by a false `ifeq` is still reported, since knowing it is dead means evaluating the
+    variables. The first errs towards missing a collision, the second towards naming one that
+    make would never reach; neither misreports what the file literally says.
     """
     found = set()
+    in_define = False
     for line in _logical_lines(text):
+        head = line.strip().split(None, 1)[0] if line.strip() else ""
+        if in_define:
+            in_define = head != "endef"
+            continue
+        if head == "define":
+            # A `define USAGE … endef` block routinely holds help text whose lines read
+            # `build: compile everything`. make stores that as a variable's value; treating
+            # the body as rules invents a collision on every target the help mentions.
+            in_define = True
+            continue
         if line.startswith("\t") or _ASSIGN.match(line):
             continue
         match = _RULE.match(line)
-        if match:
-            found.update(n for n in match.group(1).split() if _NAME.match(n))
+        if not match:
+            continue
+        left = match.group(1)
+        # `$(info build: starting)` is a function call make evaluates, not a rule — but it
+        # carries a colon, so the left-hand side splits into something that looks like a
+        # target name. Anything with a variable reference in it is beyond what can be read
+        # without evaluating the makefile, so it is skipped rather than guessed at.
+        if "$" in left:
+            continue
+        found.update(n for n in left.split() if _NAME.match(n))
     return found
 
 
@@ -140,7 +167,14 @@ def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
     """
     found: list[str] = []
     fence = ""
-    for line in text.splitlines():
+    lines = text.splitlines()
+    start = 0
+    # A YAML front matter's closing `---` would otherwise underline the line above it into a
+    # setext heading — `title: x` is not a section a project wrote by hand.
+    if lines and lines[0].strip() == "---":
+        start = next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == "---"), 0)
+    for index in range(start, len(lines)):
+        line = lines[index]
         marker = m.group(1) if (m := _FENCE.match(line)) else ""
         if fence:
             # Only a fence of the same character, at least as long, closes the block. Toggling
@@ -152,6 +186,13 @@ def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
             fence = marker
         elif (m := _HEADING.match(line)) and len(m.group(1)) in levels:
             found.append(m.group(2).lower())
+        elif line.strip() and not line.startswith("\t") and index + 1 < len(lines):
+            # Setext: the text is on one line and its level on the next. Rarer than ATX, but
+            # it produces the same anchor, so a section written that way duplicates the
+            # managed block just as literally.
+            underline = _SETEXT.match(lines[index + 1])
+            if underline and (1 if underline.group(1)[0] == "=" else 2) in levels:
+                found.append(line.strip().lower())
     return found
 
 
