@@ -51,9 +51,15 @@ def _classify_one(target: Path) -> str:
             break
     if not target.exists():
         return CREATE
+    # A directory on an owned path is not content to weigh up but a write that cannot happen:
+    # applying dies on it and leaves a `.mbproj-tmp` orphan behind. Reporting it as content
+    # that would be overwritten tells the maintainer to accept a loss that never occurs, and
+    # hides the one thing that matters — the run stops here, half applied.
+    if target.is_dir():
+        return BLOCKED
     try:
         # errors="replace" keeps a binary file on an owned path a conflict rather than a
-        # crash; OSError covers what that cannot — a directory, or an unreadable file.
+        # crash; OSError covers what that cannot — an unreadable file.
         text = target.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return OVERWRITE
@@ -70,17 +76,60 @@ REVIEW = "review"  # prose that plausibly covers what the imports carry — a hu
 
 SHARED_FINDINGS = (DUPLICATE, COLLISION, REVIEW)
 
-_FENCE = re.compile(r"^\s*(?:```|~~~)")
-_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
-_TARGET = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_.\-]*)\s*::?(?!=)")
+UNREADABLE = "unreadable"  # a shared file applying cannot read, so applying stops there
+
+_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+# ATX headings, closing hashes stripped: `## jq ##` is the same heading as `## jq`.
+_HEADING = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
+# An assignment, in every flavour make accepts. Recognised first and skipped, so `VAR ::= x`
+# is never mistaken for a rule on a target named VAR.
+_ASSIGN = re.compile(r"^\s*[^:=#]+\s*(?::{1,3}=|[?+!]=)")
+# The left-hand side of a rule: everything before the colon, on a line that is not a recipe
+# (recipes are tab-indented) and not a directive.
+_RULE = re.compile(r"^ {0,7}([^:=#]+?)\s*::?(?!=)")
+_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*\Z")
 # Words that carry no distinguishing meaning in a heading; dropping them is what lets
 # "When adding a feature" recognise itself in "When Adding Features".
 _STOPWORDS = frozenset({"a", "an", "the", "and", "or", "of", "to", "for", "in", "on", "with"})
 
 
+def _logical_lines(text: str) -> list[str]:
+    """Makefile lines with backslash continuations joined, as make itself reads them."""
+    lines: list[str] = []
+    pending = ""
+    for raw in text.splitlines():
+        if raw.endswith("\\"):
+            pending += raw[:-1].rstrip() + " "
+            continue
+        lines.append(pending + raw)
+        pending = ""
+    if pending:
+        lines.append(pending)
+    return lines
+
+
 def _make_targets(text: str) -> set[str]:
-    """Target names defined in a Makefile, ignoring directives and variables."""
-    return {m.group(1) for line in text.splitlines() if (m := _TARGET.match(line))}
+    """Target names defined in a Makefile, ignoring directives, variables and patterns.
+
+    Reads the left-hand side whole rather than the first word: `lint build:` defines *two*
+    targets, and `build package:` is a common enough idiom that missing it would hide exactly
+    the collisions this report exists to surface. Only what a rule can actually collide on is
+    kept — pattern rules (`%.o`), variable references and `.PHONY`-style dot-directives name
+    nothing `mbproj.mk` defines.
+
+    Not resolved: targets a third-party `include` brings in. Following those means resolving
+    variabled paths and optional includes, which reads more of a project's build than a
+    report is entitled to guess at; a target defined elsewhere is therefore missed, not
+    misreported.
+    """
+    found = set()
+    for line in _logical_lines(text):
+        if line.startswith("\t") or _ASSIGN.match(line):
+            continue
+        match = _RULE.match(line)
+        if match:
+            found.update(n for n in match.group(1).split() if _NAME.match(n))
+    return found
 
 
 def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
@@ -90,11 +139,18 @@ def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
     as a heading would invent duplication out of documentation that merely shows commands.
     """
     found: list[str] = []
-    in_fence = False
+    fence = ""
     for line in text.splitlines():
-        if _FENCE.match(line):
-            in_fence = not in_fence
-        elif not in_fence and (m := _HEADING.match(line)) and len(m.group(1)) in levels:
+        marker = m.group(1) if (m := _FENCE.match(line)) else ""
+        if fence:
+            # Only a fence of the same character, at least as long, closes the block. Toggling
+            # on any fence desynchronises on a ``` nested inside a ~~~~ block, and everything
+            # after it — not one heading, the rest of the file — turns invisible.
+            if marker and marker[0] == fence[0] and len(marker) >= len(fence):
+                fence = ""
+        elif marker:
+            fence = marker
+        elif (m := _HEADING.match(line)) and len(m.group(1)) in levels:
             found.append(m.group(2).lower())
     return found
 
@@ -136,7 +192,13 @@ def _prose_overlaps(text: str, state: dict, imports: list[str]) -> list[dict]:
             continue
         for title in _headings(prose, levels=(1, 2)):
             wanted = _tokens(title)
-            match = next((h for h in present if wanted and wanted <= _tokens(h)), None)
+            # A one-word title is not specific enough to nominate anything: `Conventions`, the
+            # H1 that merely names the satellite file, would flag every project carrying a
+            # heading that ends in "conventions". Two words are what make the guess worth a
+            # maintainer's glance.
+            if len(wanted) < 2:
+                continue
+            match = next((h for h in present if wanted <= _tokens(h)), None)
             if match:
                 overlaps.append({"incoming": title, "heading": match, "from": dest})
     return overlaps
@@ -160,7 +222,16 @@ def classify_shared(repo: Path, state: dict) -> list[dict]:
         if not target.exists():
             row["status"] = CREATE_SHARED
         else:
-            text = target.read_text(encoding="utf-8", errors="replace")
+            try:
+                # A shared file mbproj cannot read — a directory on the path, a permission
+                # denied — is not a question about duplication: applying will die on it. It
+                # has to be reported as the stopper it is, not crash the report and hand a
+                # caller an exit code that reads as a finding with no output to explain it.
+                text = target.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                row["status"] = UNREADABLE
+                rows.append(row)
+                continue
             if entry["block_style"]:
                 text = shared.strip_block(text, entry["block_style"])
             row["status"] = MERGE
@@ -174,7 +245,10 @@ def classify_shared(repo: Path, state: dict) -> list[dict]:
                 if overlaps:
                     row.update(status=REVIEW, findings=overlaps)
             elif path == "SETUP_ENV.md":
-                present = set(_headings(text))
+                # Any heading level counts: a project that files its tools as `### jq` under
+                # a `## Tools` chapter states the same thing the managed block would, and
+                # both produce the same `SETUP_ENV.md#jq` anchor the fix messages point at.
+                present = set(_headings(text, levels=(1, 2, 3, 4, 5, 6)))
                 dupes = sorted(t for t in (_section_title(k) for k in items) if t in present)
                 if dupes:
                     row.update(status=DUPLICATE, findings=dupes)
@@ -205,7 +279,12 @@ def report(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
         "owned": owned,
         "shared": sharing,
         "conflict_count": sum(1 for r in owned if r["status"] == OVERWRITE),
-        "blocked_count": sum(1 for r in owned if r["status"] == BLOCKED),
+        # An unreadable shared file stops an apply exactly as a blocked owned path does, so
+        # it belongs to the same count — the caller's question is "will this run through?".
+        "blocked_count": (
+            sum(1 for r in owned if r["status"] == BLOCKED)
+            + sum(1 for r in sharing if r["status"] == UNREADABLE)
+        ),
         "shared_finding_count": sum(len(r["findings"]) for r in sharing),
     }
 
@@ -227,7 +306,7 @@ def render(result: dict) -> str:
     lines += ["", "Shared files — added to, never rewritten:"]
     width = max((len(r["path"]) for r in result["shared"]), default=0)
     for row in result["shared"]:
-        mark = "!" if row["status"] in SHARED_FINDINGS else " "
+        mark = "!" if row["status"] in SHARED_FINDINGS or row["status"] == UNREADABLE else " "
         count = f" ({len(row['findings'])})" if row["findings"] else ""
         lines.append(
             f"  {mark} {row['path']:<{width}}  {row['status']}{count}"
@@ -245,8 +324,9 @@ def render(result: dict) -> str:
         )
     if result["blocked_count"]:
         lines.append(
-            f"{result['blocked_count']} path(s) cannot be written — a parent exists and is "
-            "not a directory. Applying would fail part-way through."
+            f"{result['blocked_count']} path(s) cannot be written or read — a directory or an "
+            "unreadable file sits where a file is expected. Applying would fail part-way "
+            "through, leaving the repo half written."
         )
     if result["shared_finding_count"]:
         lines.append(
