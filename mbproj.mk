@@ -4,7 +4,7 @@
 .PHONY: build changelog check-dev-env clean help install-hooks lint package
 .DEFAULT_GOAL := help
 
-_MBPROJ_EXCLUDES := ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./dist/*" ! -path "./.idea/*" ! -path "./.vscode/*" ! -path "./skills/mbproj-scaffold/templates/*"
+_MBPROJ_EXCLUDES := ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/.idea/*" ! -path "*/.vscode/*" ! -path "./skills/mbproj-scaffold/templates/*"
 
 check-dev-env: _check_markdownlint _check_jq _check_yq _check_shellcheck _check_prek _check_commitlint _check_git_cliff ## Verify required tools are installed
 	@echo "OK check-dev-env"

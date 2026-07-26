@@ -6,6 +6,12 @@ history — do not edit by hand.
 
 ## [unreleased]
 
+### 📚 Documentation
+
+- *(skill)* Warn that an unstaged prek.toml blocks every commit
+
+## [0.1.2] - 2026-07-26
+
 ### 🐛 Bug Fixes
 
 - *(skill)* Stop excluding .git from prek, which silently disabled commitlint
@@ -14,7 +20,11 @@ history — do not edit by hand.
 
 - *(skill)* State the real reason the shebang branch requires the executable bit
 
-## [claude-mbproj--v0.1.1] - 2026-07-26
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* 0.1.2
+
+## [0.1.1] - 2026-07-26
 
 ### 🐛 Bug Fixes
 
@@ -27,7 +37,7 @@ history — do not edit by hand.
 
 - *(release)* 0.1.1
 
-## [claude-mbproj--v0.1.0] - 2026-07-25
+## [0.1.0] - 2026-07-25
 
 ### 🚀 Features
 

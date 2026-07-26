@@ -34,7 +34,55 @@ def compose_exclude_dirs(state: dict) -> list[str]:
     for d in state["params"]["vendored_dirs"]:
         if d not in dirs:
             dirs.append(d)
-    return dirs
+    # Normalise last, so a hand-edited manifest is covered as well as the CLI.
+    seen: list[str] = []
+    for d in (normalize_exclude(d) for d in dirs):
+        if d and d not in seen:
+            seen.append(d)
+    return seen
+
+
+def normalize_exclude(entry: str) -> str:
+    """Strip decoration an author may reasonably type around a directory entry.
+
+    A leading `./` or a trailing `/` is natural to write and harmless to intend, but it
+    reaches the three consumers as a doubled separator (`src/generated//**`) that each one
+    interprets differently: markdownlint absorbs it, `find`'s `-path` stops matching, and
+    prek stops excluding — to the point of rewriting vendored files. Normalising once, here,
+    is what keeps the three in agreement.
+    """
+    normalized = entry.strip()
+    while normalized.startswith("././"):
+        normalized = normalized[2:]
+    return normalized.rstrip("/")
+
+
+def _is_located(entry: str) -> bool:
+    """Whether the entry names a *location* rather than a directory name.
+
+    A path (`src/generated`), a glob (`build-*`) or an explicit `./` prefix is a location:
+    the author said **where**, so it is matched only there. A bare name (`node_modules`) is
+    matched at any depth. This is what lets someone write `./vendor` to mean the one at the
+    root, and `vendor` to mean every one.
+    """
+    return "/" in entry or any(c in entry for c in "*?[")
+
+
+def _bare(entry: str) -> str:
+    """The entry without its `./` marker, which carries meaning but must not be rendered."""
+    return entry[2:] if entry.startswith("./") else entry
+
+
+def _find_exclude(entry: str) -> str:
+    """A `find` predicate excluding one entry of the composed set."""
+    e = _bare(entry)
+    return f'! -path "./{e}/*"' if _is_located(entry) else f'! -path "*/{e}/*"'
+
+
+def _glob_exclude(entry: str) -> str:
+    """Same rule as `_find_exclude`, in the glob syntax markdownlint and prek expect."""
+    e = _bare(entry)
+    return f"{e}/**" if _is_located(entry) else f"**/{e}/**"
 
 
 def build_mk(state: dict) -> str:
@@ -43,7 +91,7 @@ def build_mk(state: dict) -> str:
     # must exist even when the layer that used to carry it (lint_format) is not applied.
     main = sorted({"check-dev-env", "help", *(t for n in applied for t in LAYERS[n]["main_targets"])})
     checks = [t for n in applied for t in LAYERS[n]["check_targets"]]
-    excludes = " ".join(f'! -path "./{d}/*"' for d in compose_exclude_dirs(state))
+    excludes = " ".join(_find_exclude(d) for d in compose_exclude_dirs(state))
     check_prereq = (" " + " ".join(checks)) if checks else ""
     parts = [
         ".PHONY: " + " ".join(main),
@@ -75,10 +123,14 @@ def build_markdownlint(state: dict) -> str:
         "  MD024:",
         "    siblings_only: true",
         "",
-        "# Vendored / generated directories excluded from linting.",
+        "# Vendored / generated directories excluded from linting. A bare name is excluded",
+        "# at any depth (node_modules, and packages/*/node_modules alike); an entry written",
+        "# as a path, a glob, or with a leading ./ is excluded only where it says. Note that",
+        "# `dist` therefore hides a src/dist/ holding real sources — declare such a directory",
+        "# out of vendored_dirs and rename it if you need it linted.",
         "ignores:",
     ]
-    lines += [f'  - "{d}/**"' for d in compose_exclude_dirs(state)]
+    lines += [f'  - "{_glob_exclude(d)}"' for d in compose_exclude_dirs(state)]
     return "\n".join(lines) + "\n"
 
 
@@ -88,7 +140,9 @@ def build_prek(state: dict) -> str:
     # `.git/COMMIT_EDITMSG`, the file git hands to the commit-msg hook. Excluding it makes
     # prek report "no files to check" and skip commitlint entirely, so every commit message
     # passes unchecked while the run still looks green.
-    globs = ", ".join(f'"{d}/**"' for d in compose_exclude_dirs(state) if d != ".git")
+    globs = ", ".join(
+        f'"{_glob_exclude(d)}"' for d in compose_exclude_dirs(state) if d != ".git"
+    )
     return (
         "# prek (https://github.com/j178/prek) - Rust, standalone, no Python.\n"
         "# Content linting is owned by the Makefile: the local `lint` hook delegates to\n"
@@ -128,7 +182,10 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     if project_name is not None:
         state["params"]["project_name"] = project_name
     if vendored is not None:
-        state["params"]["vendored_dirs"] = list(vendored)
+        # Normalised on the way in too, so the manifest records what will actually be used.
+        state["params"]["vendored_dirs"] = [
+            d for d in (normalize_exclude(v) for v in vendored) if d
+        ]
 
     for name in target_layers:
         for dep in DEPENDS_ON[name]:

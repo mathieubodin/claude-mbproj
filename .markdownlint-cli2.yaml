@@ -10,11 +10,15 @@ config:
   MD024:
     siblings_only: true
 
-# Vendored / generated directories excluded from linting.
+# Vendored / generated directories excluded from linting. A bare name is excluded
+# at any depth (node_modules, and packages/*/node_modules alike); an entry written
+# as a path, a glob, or with a leading ./ is excluded only where it says. Note that
+# `dist` therefore hides a src/dist/ holding real sources — declare such a directory
+# out of vendored_dirs and rename it if you need it linted.
 ignores:
-  - ".git/**"
-  - "node_modules/**"
-  - "dist/**"
-  - ".idea/**"
-  - ".vscode/**"
+  - "**/.git/**"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/.idea/**"
+  - "**/.vscode/**"
   - "skills/mbproj-scaffold/templates/**"
