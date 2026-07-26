@@ -48,7 +48,8 @@ def fence_mask(lines: list[str]) -> list[bool]:
     """
     mask: list[bool] = []
     fence = ""
-    for line in lines:
+    opened_at = -1
+    for index, line in enumerate(lines):
         marker = m.group(1) if (m := _FENCE.match(line)) else ""
         if fence:
             mask.append(True)  # the closing fence belongs to the block
@@ -56,17 +57,20 @@ def fence_mask(lines: list[str]) -> list[bool]:
                 fence = ""
         elif marker:
             fence = marker
+            opened_at = index
             mask.append(True)
         else:
             mask.append(False)
     if fence:
-        # A block that never closes swallows the rest of the file, including the anchor lines
-        # mbproj itself appended at the end. The writer would then stop recognising its own
-        # output and re-add it on every run — imports growing by two each time, with nothing
-        # to flag it. Rather than act on a reading this unreliable, fall back to the literal
-        # one: it costs the protection a quoted line would have had in a file that is
-        # malformed anyway, and it is at least stable.
-        return [False] * len(lines)
+        # A block that never closes would swallow the rest of the file, including the anchor
+        # lines mbproj itself appends at the end: the writer would stop recognising its own
+        # output and re-add it every run, imports growing unbounded with nothing to flag it.
+        # From the unclosed opening onwards the file is therefore read literally. Only that
+        # opening is distrusted — blocks that did close, above it, keep protecting what they
+        # quote, which is what makes the fallback cost nothing on the part of the file that
+        # is still well formed.
+        for index in range(opened_at, len(mask)):
+            mask[index] = False
     return mask
 
 
