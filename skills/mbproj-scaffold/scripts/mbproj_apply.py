@@ -10,6 +10,7 @@ Deterministic: same manifest -> byte-identical output.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -232,24 +233,59 @@ def shared_plan(state: dict) -> dict[str, dict]:
     }
 
 
+_H1 = re.compile(r"^#[ \t]+\S")
+_SETEXT_H1 = re.compile(r"^[ ]{0,3}=+[ \t]*$")
+# markdownlint counts a front matter `title:` as the document's top-level heading (its
+# `front_matter_title` default), so a file carrying one already has what seeding would add.
+_FRONT_TITLE = re.compile(r"^\s*title\s*[:=]", re.M)
+
+
 def _needs_title(path: Path) -> bool:
-    """Whether a shared Markdown file still needs its heading seeded.
+    """Whether a shared Markdown file still needs an H1 seeded.
 
-    The question is not "is there a file" but "does it open on a heading": `touch CLAUDE.md`
-    is an ordinary reflex, a template `git init` leaves such files behind, and a file holding
-    only `<!-- TODO -->` is lint-clean until mbproj appends to it. In all three the file then
-    starts on an `@import` or a block marker with no H1 above it, and MD041 — from the very
-    lint this scaffolder generates — turns red on a file that was green before.
-
-    Seeding adds a title above what is there; nothing is removed, so this stays within the
-    shared-file contract. The BOM is stripped first: it is not whitespace to `str.strip`, so
-    a file containing just a BOM would otherwise read as having content.
+    The question is whether the file *has* a top-level heading, not whether it opens on one.
+    Asking the narrower question seeds a second H1 into a file whose title sits under a
+    licence comment or a note block, and MD025 then fails a file that was clean — the same
+    accident as the one seeding exists to prevent, in the other direction. Both spellings of
+    an H1 count, and a quoted `#` inside a code sample counts for neither.
     """
     if not path.exists():
         return True
     text = path.read_text(encoding="utf-8", errors="replace").lstrip(shared.BOM)
-    first = next((ln for ln in text.splitlines() if ln.strip()), "")
-    return not first.startswith("# ")
+    if text.startswith("---\n"):
+        close = text.find("\n---\n", 4)
+        if close != -1 and _FRONT_TITLE.search(text[4:close]):
+            return False
+    lines = text.splitlines()
+    quoted = shared.fence_mask(lines)
+    for index, line in enumerate(lines):
+        if quoted[index]:
+            continue
+        if _H1.match(line):
+            return False
+        if line.strip() and index + 1 < len(lines) and _SETEXT_H1.match(lines[index + 1]):
+            return False
+    return True
+
+
+def _seed_shared(path: Path, head: str) -> None:
+    """Write `head` above whatever the file already holds, adding and removing nothing.
+
+    A leading YAML frontmatter block keeps line 1 — pushed down it stops being frontmatter
+    and gets read as a setext heading over a rule, which is how seeding turned a clean file
+    into two lint errors. `render_owned` makes the same exception for owned files; this is
+    the shared-file half of that rule. A BOM likewise goes back where it was.
+    """
+    existing = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+    bom = shared.BOM if existing.startswith(shared.BOM) else ""
+    body = existing[len(bom):].lstrip("\n")
+    front = ""
+    if body.startswith("---\n"):
+        close = body.find("\n---\n", 4)
+        if close != -1:
+            split = close + len("\n---\n")
+            front, body = body[:split] + "\n", body[split:].lstrip("\n")
+    common.write_text_atomic(path, bom + front + head + (f"\n{body}" if body.strip() else ""))
 
 
 def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
@@ -302,10 +338,7 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     claude = repo / "CLAUDE.md"
     if _needs_title(claude):
         pname = state["params"]["project_name"]
-        head = f"# {pname}\n\nGuidance for AI agents working in this repository.\n"
-        existing = claude.read_text(encoding="utf-8", errors="replace") if claude.exists() else ""
-        body = existing.lstrip(shared.BOM).lstrip("\n")
-        common.write_text_atomic(claude, head + (f"\n{body}" if body.strip() else ""))
+        _seed_shared(claude, f"# {pname}\n\nGuidance for AI agents working in this repository.\n")
     plan = shared_plan(state)
     shared.ensure_anchor_lines(
         claude, plan["CLAUDE.md"]["items"], r"^@\.claude/mbproj/", fenced_aware=True
@@ -320,10 +353,11 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
         setup = repo / "SETUP_ENV.md"
         if _needs_title(setup):
             pname = state["params"]["project_name"]
-            seed = f"# Environment Setup\n\nTooling required to develop on **{pname}**. Run `make check-dev-env` to verify.\n"
-            existing = setup.read_text(encoding="utf-8", errors="replace") if setup.exists() else ""
-            body = existing.lstrip(shared.BOM).lstrip("\n")
-            common.write_text_atomic(setup, seed + (f"\n{body}" if body.strip() else ""))
+            _seed_shared(
+                setup,
+                f"# Environment Setup\n\nTooling required to develop on **{pname}**. "
+                "Run `make check-dev-env` to verify.\n",
+            )
         shared.ensure_block(setup, "\n\n".join(sections) + "\n", plan["SETUP_ENV.md"]["block_style"])
 
     # shared: .gitignore lines (b) — layer-contributed only

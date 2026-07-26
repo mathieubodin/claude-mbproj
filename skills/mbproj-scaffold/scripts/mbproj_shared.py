@@ -59,6 +59,14 @@ def fence_mask(lines: list[str]) -> list[bool]:
             mask.append(True)
         else:
             mask.append(False)
+    if fence:
+        # A block that never closes swallows the rest of the file, including the anchor lines
+        # mbproj itself appended at the end. The writer would then stop recognising its own
+        # output and re-add it on every run — imports growing by two each time, with nothing
+        # to flag it. Rather than act on a reading this unreliable, fall back to the literal
+        # one: it costs the protection a quoted line would have had in a file that is
+        # malformed anyway, and it is at least stable.
+        return [False] * len(lines)
     return mask
 
 
