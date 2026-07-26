@@ -8,10 +8,24 @@ history — do not edit by hand.
 
 ### 🐛 Bug Fixes
 
+- *(skill)* Stop excluding .git from prek, which silently disabled commitlint
+
+### 📚 Documentation
+
+- *(skill)* State the real reason the shebang branch requires the executable bit
+
+## [claude-mbproj--v0.1.1] - 2026-07-26
+
+### 🐛 Bug Fixes
+
 - *(skill)* Guard the agentic install on project settings, not the plugin list
 - *(skill)* Stop promising a format target the tooling does not provide
 - *(skill)* Place the Makefile include first so projects can specialize targets
 - *(skill)* Lint shell by extension and shebang, not by extension alone
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* 0.1.1
 
 ## [claude-mbproj--v0.1.0] - 2026-07-25
 
