@@ -83,7 +83,12 @@ def build_markdownlint(state: dict) -> str:
 
 
 def build_prek(state: dict) -> str:
-    globs = ", ".join(f'"{d}/**"' for d in compose_exclude_dirs(state))
+    # `.git` must not be excluded here, however sensible it looks. prek only ever sees
+    # staged paths, so the glob cannot match project files — but it *does* match
+    # `.git/COMMIT_EDITMSG`, the file git hands to the commit-msg hook. Excluding it makes
+    # prek report "no files to check" and skip commitlint entirely, so every commit message
+    # passes unchecked while the run still looks green.
+    globs = ", ".join(f'"{d}/**"' for d in compose_exclude_dirs(state) if d != ".git")
     return (
         "# prek (https://github.com/j178/prek) - Rust, standalone, no Python.\n"
         "# Content linting is owned by the Makefile: the local `lint` hook delegates to\n"

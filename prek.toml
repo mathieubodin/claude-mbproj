@@ -6,7 +6,7 @@
 # `make lint`. The builtin repo only adds fast hygiene hooks. Activate once with
 # `make install-hooks` (see SETUP_ENV.md#git-hooks).
 
-exclude = { glob = [".git/**", "node_modules/**", "dist/**", ".idea/**", ".vscode/**", "skills/mbproj-scaffold/templates/**"] }
+exclude = { glob = ["node_modules/**", "dist/**", ".idea/**", ".vscode/**", "skills/mbproj-scaffold/templates/**"] }
 
 # Run hooks only at the pre-commit stage by default, so hygiene + `make lint` do
 # not also run at commit-msg. commitlint overrides this with stages = ["commit-msg"].
