@@ -45,10 +45,24 @@ def ensure_anchor_lines(
     first lets project definitions take precedence.
     """
     identify_re = re.compile(identify)
-    kept = [ln for ln in _read_or_empty(path).splitlines() if not identify_re.search(ln)]
-    # Removing our line strands the blank separator that surrounded it. Left in place it
-    # would accumulate, and a trailing one makes the file fail the `end-of-file-fixer` hook
-    # this same scaffolder generates — the engine would emit a file its own config rejects.
+    kept: list[str] = []
+    orphaned = False
+    for line in _read_or_empty(path).splitlines():
+        if identify_re.search(line):
+            orphaned = True
+            continue
+        # Removing our line strands the blank separators that surrounded it: the one before
+        # and the one after become adjacent. In the middle of a file that is MD012, which the
+        # markdown lint this same scaffolder generates rejects — the engine would emit a file
+        # its own config refuses. Exactly one blank per removal is dropped, so the project's
+        # own spacing elsewhere is never normalised.
+        if orphaned and not line.strip() and kept and not kept[-1].strip():
+            orphaned = False
+            continue
+        kept.append(line)
+        if line.strip():
+            orphaned = False
+    # Same reasoning at the end of the file, where a stranded blank fails `end-of-file-fixer`.
     while kept and not kept[-1].strip():
         kept.pop()
     if desired:

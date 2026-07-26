@@ -1,7 +1,6 @@
 ---
 name: mbproj-scaffold
 description: "Scaffold reusable project tooling (lint/format, git guards, changelog, agentic workflow) into any repo — new or existing, à la carte. Idempotent, re-entrant, non-destructive. Run to initialize or update the tooling."
-version: 0.1.0
 user-invocable: true
 ---
 
@@ -93,4 +92,6 @@ if [ ! -d "<repo>/_bmad" ]; then
 fi
 ```
 
-> Status: v0.1.0 — all four layers are implemented (lint_format, guards, changelog, agentic).
+> Status: all four layers are implemented (lint_format, guards, changelog, agentic). The
+> version is `.claude-plugin/plugin.json`, the single source `plugin_version()` reads and the
+> manifest records — stating it here as well is what let the two drift apart.

@@ -232,6 +232,17 @@ def shared_plan(state: dict) -> dict[str, dict]:
     }
 
 
+def _is_empty(path: Path) -> bool:
+    """Whether a shared file needs seeding — absent, or present with nothing in it.
+
+    `touch CLAUDE.md` is an ordinary reflex, and a template `git init` leaves such files
+    behind. Testing existence alone skips the seed, and the file then opens on an `@import`
+    or a block marker with no H1 above it — which the markdown lint this scaffolder generates
+    rejects (MD041).
+    """
+    return not path.exists() or not path.read_text(encoding="utf-8", errors="replace").strip()
+
+
 def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     """The manifest state that applying these layers would produce. Writes nothing."""
     state = manifest.read(repo)
@@ -241,6 +252,11 @@ def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> d
     state["plugin_version"] = common.plugin_version()
     if project_name is not None:
         state["params"]["project_name"] = project_name
+    # The manifest has to record the name actually used, not the flag that was passed: with
+    # I4 making it the source of truth, a blank entry beside a CLAUDE.md seeded from the
+    # directory name means the two disagree about what the project is called.
+    if not state["params"]["project_name"]:
+        state["params"]["project_name"] = repo.name
     if vendored is not None:
         # Normalised on the way in too, so the manifest records what will actually be used.
         state["params"]["vendored_dirs"] = [
@@ -272,8 +288,8 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
 
     # shared: CLAUDE.md imports (a) — seed a title first so a fresh file has an H1
     claude = repo / "CLAUDE.md"
-    if not claude.exists():
-        pname = state["params"]["project_name"] or repo.name
+    if _is_empty(claude):
+        pname = state["params"]["project_name"]
         common.write_text_atomic(claude, f"# {pname}\n\nGuidance for AI agents working in this repository.\n")
     plan = shared_plan(state)
     shared.ensure_anchor_lines(claude, plan["CLAUDE.md"]["items"], r"^@\.claude/mbproj/")
@@ -285,8 +301,8 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     ]
     if sections:
         setup = repo / "SETUP_ENV.md"
-        if not setup.exists():
-            pname = state["params"]["project_name"] or repo.name
+        if _is_empty(setup):
+            pname = state["params"]["project_name"]
             seed = f"# Environment Setup\n\nTooling required to develop on **{pname}**. Run `make check-dev-env` to verify.\n"
             common.write_text_atomic(setup, seed)
         shared.ensure_block(setup, "\n\n".join(sections) + "\n", plan["SETUP_ENV.md"]["block_style"])
@@ -311,7 +327,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--vendored-dir", dest="vendored", action="append", default=None,
                         help="a vendored directory to exclude from linting (repeatable)")
     args = parser.parse_args(argv)
-    apply(args.repo.resolve(), args.layers, args.project_name, args.vendored)
+
+    repo = args.repo.resolve()
+    # Scaffolding tooling into a repository that does not exist is a typo, not a greenfield
+    # install: creating the directory turns a mistyped path into a plausible-looking tree
+    # nobody asked for. The preflight refuses the same way, for the same reason.
+    if not repo.is_dir():
+        parser.error(f"{args.repo} is not a directory")
+
+    try:
+        apply(repo, args.layers, args.project_name, args.vendored)
+    except SystemExit as exc:  # a rejected layer set is a usage error, not a failed apply
+        # Same convention as the preflight: 2 means the question was malformed. Left as the
+        # default 1, a caller could not tell a rejected dependency chain from a run that
+        # broke part-way through — one wrote nothing, the other may have written half.
+        print(exc, file=sys.stderr)
+        return 2
     print(args.repo)
     return 0
 
