@@ -17,42 +17,56 @@ import sys
 from pathlib import Path
 
 import mbproj_apply as apply_mod
-import mbproj_common as common
+import mbproj_writer as writer
 from mbproj_layers import LAYER_ORDER
 
 # What applying would do to one owned file.
 CREATE = "create"  # absent: nothing to lose
 REGENERATE = "regenerate"  # present and mbproj-generated: rewriting is the point
 OVERWRITE = "overwrite-handwritten"  # present without the banner: content would be lost
+BLOCKED = "blocked"  # applying would fail here, so the repo would end up half-written
 
-BANNER_MARK = common.BANNER_LINES[0]
+# Statuses that must stop an apply.
+STOPPERS = (OVERWRITE, BLOCKED)
+
+
+def _classify_one(target: Path) -> str:
+    # A parent that is not a directory makes the write fail mid-run, leaving the repo half
+    # applied. `exists()` is false in that case, so without this check it reads as `create`
+    # — a green light in front of a crash.
+    for parent in target.parents:
+        if parent.exists():
+            if not parent.is_dir():
+                return BLOCKED
+            break
+    if not target.exists():
+        return CREATE
+    try:
+        # errors="replace" keeps a binary file on an owned path a conflict rather than a
+        # crash; OSError covers what that cannot — a directory, or an unreadable file.
+        text = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return OVERWRITE
+    return REGENERATE if writer.has_banner(text) else OVERWRITE
 
 
 def classify_owned(repo: Path, state: dict) -> list[dict]:
     """Classify every owned file for this state. Sorted, so the report is stable."""
-    rows = []
-    for dest in sorted(apply_mod.owned_plan(state)):
-        target = repo / dest
-        if not target.exists():
-            status = CREATE
-        else:
-            # errors="replace" so a binary file sitting on an owned path is reported as a
-            # conflict rather than crashing the preflight.
-            text = target.read_text(encoding="utf-8", errors="replace")
-            status = REGENERATE if BANNER_MARK in text else OVERWRITE
-        rows.append({"path": dest, "status": status})
-    return rows
+    return [
+        {"path": dest, "status": _classify_one(repo / dest)}
+        for dest in sorted(apply_mod.owned_plan(state))
+    ]
 
 
 def report(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     state = apply_mod.plan_state(repo, target_layers, project_name, vendored)
     owned = classify_owned(repo, state)
-    conflicts = [r for r in owned if r["status"] == OVERWRITE]
     return {
         "repo": str(repo),
         "layers": [n for n in LAYER_ORDER if state["layers"].get(n, {}).get("applied")],
         "owned": owned,
-        "conflict_count": len(conflicts),
+        "conflict_count": sum(1 for r in owned if r["status"] == OVERWRITE),
+        "blocked_count": sum(1 for r in owned if r["status"] == BLOCKED),
     }
 
 
@@ -60,7 +74,7 @@ def render(result: dict) -> str:
     lines = [f"Preflight for {result['repo']}", f"Layers: {', '.join(result['layers'])}", ""]
     width = max((len(r["path"]) for r in result["owned"]), default=0)
     for row in result["owned"]:
-        mark = "!" if row["status"] == OVERWRITE else " "
+        mark = "!" if row["status"] in STOPPERS else " "
         lines.append(f"  {mark} {row['path']:<{width}}  {row['status']}")
     lines.append("")
     if result["conflict_count"]:
@@ -68,7 +82,12 @@ def render(result: dict) -> str:
             f"{result['conflict_count']} hand-written file(s) would be overwritten. "
             "Move what you want to keep out of the way, or accept the loss, before applying."
         )
-    else:
+    if result["blocked_count"]:
+        lines.append(
+            f"{result['blocked_count']} path(s) cannot be written — a parent exists and is "
+            "not a directory. Applying would fail part-way through."
+        )
+    if not (result["conflict_count"] or result["blocked_count"]):
         lines.append("No hand-written file would be overwritten.")
     return "\n".join(lines)
 
@@ -83,14 +102,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="emit the report as JSON")
     args = parser.parse_args(argv)
 
-    result = report(args.repo.resolve(), args.layers, args.project_name, args.vendored)
+    repo = args.repo.resolve()
+    # A typo in the path would otherwise produce a green, reassuring report about a
+    # repository that does not exist.
+    if not repo.is_dir():
+        parser.error(f"{args.repo} is not a directory")
+
+    try:
+        result = report(repo, args.layers, args.project_name, args.vendored)
+    except SystemExit as exc:  # a rejected layer set is a usage error, not a finding
+        print(exc, file=sys.stderr)
+        return 2
     if args.json:
         json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")
     else:
         print(render(result))
-    # Non-zero on conflicts, so a caller can gate on it.
-    return 1 if result["conflict_count"] else 0
+    # 1 means "applying would lose or fail", 2 means "the question was malformed" — a caller
+    # gating on the exit code must be able to tell a finding from a broken invocation.
+    return 1 if result["conflict_count"] or result["blocked_count"] else 0
 
 
 if __name__ == "__main__":

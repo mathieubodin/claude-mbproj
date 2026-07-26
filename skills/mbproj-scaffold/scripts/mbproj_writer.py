@@ -35,6 +35,33 @@ def render_owned(target: str | Path, content: str, style: str | None = None) -> 
     return f"{banner}\n{body}"
 
 
+def has_banner(text: str) -> bool:
+    """Whether the banner sits where `render_owned` puts it — not merely somewhere.
+
+    This is the inverse of `render_owned` and lives beside it on purpose: the code that
+    decides where the banner goes is the code that decides where to look for it.
+
+    Searching the whole file would mistake a hand-written document that *quotes* the banner
+    for a generated one — and a conventions file explaining "do not edit generated files" is
+    exactly the document that quotes it. The banner proves authorship only at the top, after
+    a YAML frontmatter block when there is one.
+    """
+    lines = text.splitlines(keepends=True)
+    start = 0
+    if lines and lines[0].strip() == "---":
+        for index in range(1, len(lines)):
+            if lines[index].strip() == "---":
+                start = index + 1
+                break
+        else:
+            return False
+    # Match the rendered block exactly rather than looking for the marker nearby: a quote
+    # of the banner in the opening prose of a hand-written document would land inside any
+    # tolerant window.
+    body = "".join(lines[start:]).lstrip("\n")
+    return any(body.startswith(common.render_banner(s)) for s in ("hash", "slash", "html"))
+
+
 def write_owned(target: str | Path, content: str, style: str | None = None) -> str:
     text = render_owned(target, content, style)
     common.write_text_atomic(target, text)
