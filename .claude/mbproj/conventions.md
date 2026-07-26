@@ -5,7 +5,7 @@ Re-run `/mbproj-scaffold` to update. Managed by the claude-mbproj plugin.
 
 # Conventions
 
-Project conventions scaffolded by mbproj-scaffold (lint/format layer). These are
+Project conventions scaffolded by mbproj-scaffold (the `lint_format` layer). These are
 framework-agnostic; agentic-workflow specifics live in a separate imported file.
 
 ## Code standards
@@ -16,7 +16,8 @@ framework-agnostic; agentic-workflow specifics live in a separate imported file.
 - Review in two phases: metadata triage (decide *where* to look), then code-grounded
   findings (the only phase that ranks severity).
 - Pre-merge checklist: a code-grounded review of the diff, a measured coverage number,
-  then lint and format green for both code and documentation.
+  then `make lint` green for both code and documentation. The tooling lints; it does not
+  reformat, so formatting is on the author.
 
 ## When adding a feature
 
