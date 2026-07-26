@@ -232,15 +232,24 @@ def shared_plan(state: dict) -> dict[str, dict]:
     }
 
 
-def _is_empty(path: Path) -> bool:
-    """Whether a shared file needs seeding — absent, or present with nothing in it.
+def _needs_title(path: Path) -> bool:
+    """Whether a shared Markdown file still needs its heading seeded.
 
-    `touch CLAUDE.md` is an ordinary reflex, and a template `git init` leaves such files
-    behind. Testing existence alone skips the seed, and the file then opens on an `@import`
-    or a block marker with no H1 above it — which the markdown lint this scaffolder generates
-    rejects (MD041).
+    The question is not "is there a file" but "does it open on a heading": `touch CLAUDE.md`
+    is an ordinary reflex, a template `git init` leaves such files behind, and a file holding
+    only `<!-- TODO -->` is lint-clean until mbproj appends to it. In all three the file then
+    starts on an `@import` or a block marker with no H1 above it, and MD041 — from the very
+    lint this scaffolder generates — turns red on a file that was green before.
+
+    Seeding adds a title above what is there; nothing is removed, so this stays within the
+    shared-file contract. The BOM is stripped first: it is not whitespace to `str.strip`, so
+    a file containing just a BOM would otherwise read as having content.
     """
-    return not path.exists() or not path.read_text(encoding="utf-8", errors="replace").strip()
+    if not path.exists():
+        return True
+    text = path.read_text(encoding="utf-8", errors="replace").lstrip(shared.BOM)
+    first = next((ln for ln in text.splitlines() if ln.strip()), "")
+    return not first.startswith("# ")
 
 
 def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
@@ -250,7 +259,10 @@ def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> d
     # freeze it at the first install and every layer would keep re-recording that stale
     # value. Applying is what stamps the running plugin's version.
     state["plugin_version"] = common.plugin_version()
-    if project_name is not None:
+    # An empty `--project-name` is a caller that failed to fill it in, not an instruction to
+    # forget the name: taken literally it would replace a recorded `acme` with the directory
+    # name, silently. Absent and blank are therefore treated the same.
+    if project_name:
         state["params"]["project_name"] = project_name
     # The manifest has to record the name actually used, not the flag that was passed: with
     # I4 making it the source of truth, a blank entry beside a CLAUDE.md seeded from the
@@ -286,13 +298,18 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
         repo / "Makefile", ["include mbproj.mk"], r"^\s*include\s+mbproj\.mk\s*$", "prepend"
     )
 
-    # shared: CLAUDE.md imports (a) — seed a title first so a fresh file has an H1
+    # shared: CLAUDE.md imports (a) — seed a title first so the file opens on an H1
     claude = repo / "CLAUDE.md"
-    if _is_empty(claude):
+    if _needs_title(claude):
         pname = state["params"]["project_name"]
-        common.write_text_atomic(claude, f"# {pname}\n\nGuidance for AI agents working in this repository.\n")
+        head = f"# {pname}\n\nGuidance for AI agents working in this repository.\n"
+        existing = claude.read_text(encoding="utf-8", errors="replace") if claude.exists() else ""
+        body = existing.lstrip(shared.BOM).lstrip("\n")
+        common.write_text_atomic(claude, head + (f"\n{body}" if body.strip() else ""))
     plan = shared_plan(state)
-    shared.ensure_anchor_lines(claude, plan["CLAUDE.md"]["items"], r"^@\.claude/mbproj/")
+    shared.ensure_anchor_lines(
+        claude, plan["CLAUDE.md"]["items"], r"^@\.claude/mbproj/", fenced_aware=True
+    )
 
     # shared: SETUP_ENV.md tool sections (b)
     sections = [
@@ -301,10 +318,12 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     ]
     if sections:
         setup = repo / "SETUP_ENV.md"
-        if _is_empty(setup):
+        if _needs_title(setup):
             pname = state["params"]["project_name"]
             seed = f"# Environment Setup\n\nTooling required to develop on **{pname}**. Run `make check-dev-env` to verify.\n"
-            common.write_text_atomic(setup, seed)
+            existing = setup.read_text(encoding="utf-8", errors="replace") if setup.exists() else ""
+            body = existing.lstrip(shared.BOM).lstrip("\n")
+            common.write_text_atomic(setup, seed + (f"\n{body}" if body.strip() else ""))
         shared.ensure_block(setup, "\n\n".join(sections) + "\n", plan["SETUP_ENV.md"]["block_style"])
 
     # shared: .gitignore lines (b) — layer-contributed only

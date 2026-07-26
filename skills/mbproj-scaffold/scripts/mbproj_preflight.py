@@ -79,9 +79,8 @@ SHARED_FINDINGS = (DUPLICATE, COLLISION, REVIEW)
 UNREADABLE = "unreadable"  # a shared file applying cannot read, so applying stops there
 
 # Up to three *spaces* of indent, never a tab: in CommonMark a leading tab opens an indented
-# code block, so `\s` here would read a fenced-looking line inside a code sample as a real
-# fence — and everything after it as fenced-out.
-_FENCE = re.compile(r"^[ ]{0,3}(`{3,}|~{3,})")
+# code block, so `\s` here would read a heading inside a code sample as a real one. Fence
+# tracking itself lives in mbproj_shared, shared with the writer.
 # ATX headings, closing hashes stripped: `## jq ##` is the same heading as `## jq`.
 _HEADING = re.compile(r"^[ ]{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
 # The underline of a setext heading — `jq` over `--` is an H2, and carries the same anchor.
@@ -166,8 +165,10 @@ def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
     as a heading would invent duplication out of documentation that merely shows commands.
     """
     found: list[str] = []
-    fence = ""
     lines = text.splitlines()
+    # Same mask the writer uses, from the same function: a heading the report skips as quoted
+    # must be a line the writer leaves alone, or one of them acts on what the other ignores.
+    quoted = shared.fence_mask(lines)
     start = 0
     # A YAML front matter's closing `---` would otherwise underline the line above it into a
     # setext heading — `title: x` is not a section a project wrote by hand.
@@ -175,16 +176,9 @@ def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
         start = next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == "---"), 0)
     for index in range(start, len(lines)):
         line = lines[index]
-        marker = m.group(1) if (m := _FENCE.match(line)) else ""
-        if fence:
-            # Only a fence of the same character, at least as long, closes the block. Toggling
-            # on any fence desynchronises on a ``` nested inside a ~~~~ block, and everything
-            # after it — not one heading, the rest of the file — turns invisible.
-            if marker and marker[0] == fence[0] and len(marker) >= len(fence):
-                fence = ""
-        elif marker:
-            fence = marker
-        elif (m := _HEADING.match(line)) and len(m.group(1)) in levels:
+        if quoted[index]:
+            continue
+        if (m := _HEADING.match(line)) and len(m.group(1)) in levels:
             found.append(m.group(2).lower())
         elif line.strip() and not line.startswith("\t") and index + 1 < len(lines):
             # Setext: the text is on one line and its level on the next. Rarer than ATX, but
@@ -372,9 +366,19 @@ def render(result: dict) -> str:
     if result["shared_finding_count"]:
         lines.append(
             f"{result['shared_finding_count']} finding(s) in shared files. Nothing is lost "
-            "there — mbproj adds to them — but the project would carry the same thing twice. "
-            "Removing the superseded copy is an editorial call, so it is left to you."
+            "there — mbproj adds to them — but the project would carry the same thing twice."
         )
+        # What "twice" costs differs per file, and lumping the three together undersells the
+        # first: a duplicated tool section is not a matter of taste, it turns the generated
+        # lint red (MD024) — the very failure this scaffolder is meant not to produce.
+        consequences = {
+            DUPLICATE: "duplicated sections and ignore lines: `make lint` fails on them (MD024)",
+            COLLISION: "colliding targets: make warns, and the project's recipe wins (by design)",
+            REVIEW: "nominated headings: prose only you can compare — purely editorial",
+        }
+        seen = {r["status"] for r in result["shared"]}
+        lines += [f"  - {text}" for status, text in consequences.items() if status in seen]
+        lines.append("Removing what is superseded is an editorial call, so it is left to you.")
     if not (result["conflict_count"] or result["blocked_count"]):
         lines.append("No hand-written file would be overwritten.")
     return "\n".join(lines)
