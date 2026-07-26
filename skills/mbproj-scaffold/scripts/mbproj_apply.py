@@ -194,6 +194,44 @@ def owned_plan(state: dict) -> dict[str, str]:
     return plan
 
 
+def shared_plan(state: dict) -> dict[str, dict]:
+    """What applying would add to each *shared* file, keyed by path.
+
+    Shared files are never rewritten, so the risk here is not loss but duplication: the
+    project may already carry, by hand, what mbproj is about to contribute. Same reason as
+    `owned_plan` for existing: `apply` adds exactly these items and the preflight reports on
+    them, so the two cannot drift apart.
+    """
+    applied = _applied(state)
+    # `block_style` names the I3(b) comment syntax, or is None for the I3(a) files. Both
+    # mechanisms are described here rather than at the call sites: the preflight has to strip
+    # a previous run's own block before judging what a project carries by hand, and reading
+    # that style from anywhere else is how the two would come to disagree about which region
+    # of a file belongs to mbproj.
+    return {
+        "Makefile": {
+            "kind": "make include",
+            "items": ["include mbproj.mk"],
+            "block_style": None,
+        },
+        "CLAUDE.md": {
+            "kind": "imports",
+            "items": [f"@{p}" for n in applied for p in LAYERS[n]["claude_imports"]],
+            "block_style": None,
+        },
+        "SETUP_ENV.md": {
+            "kind": "tool sections",
+            "items": [s for n in applied for s in LAYERS[n]["setup_env_sections"]],
+            "block_style": "html",
+        },
+        ".gitignore": {
+            "kind": "ignore lines",
+            "items": [line for n in applied for line in LAYERS[n]["gitignore_lines"]],
+            "block_style": "hash",
+        },
+    }
+
+
 def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     """The manifest state that applying these layers would produce. Writes nothing."""
     state = manifest.read(repo)
@@ -237,14 +275,13 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     if not claude.exists():
         pname = state["params"]["project_name"] or repo.name
         common.write_text_atomic(claude, f"# {pname}\n\nGuidance for AI agents working in this repository.\n")
-    imports = [f"@{p}" for n in applied for p in LAYERS[n]["claude_imports"]]
-    shared.ensure_anchor_lines(claude, imports, r"^@\.claude/mbproj/")
+    plan = shared_plan(state)
+    shared.ensure_anchor_lines(claude, plan["CLAUDE.md"]["items"], r"^@\.claude/mbproj/")
 
     # shared: SETUP_ENV.md tool sections (b)
     sections = [
         (TEMPLATES_DIR / "setup_env" / f"{s}.md").read_text(encoding="utf-8").rstrip("\n")
-        for n in applied
-        for s in LAYERS[n]["setup_env_sections"]
+        for s in plan["SETUP_ENV.md"]["items"]
     ]
     if sections:
         setup = repo / "SETUP_ENV.md"
@@ -252,12 +289,14 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
             pname = state["params"]["project_name"] or repo.name
             seed = f"# Environment Setup\n\nTooling required to develop on **{pname}**. Run `make check-dev-env` to verify.\n"
             common.write_text_atomic(setup, seed)
-        shared.ensure_block(setup, "\n\n".join(sections) + "\n", "html")
+        shared.ensure_block(setup, "\n\n".join(sections) + "\n", plan["SETUP_ENV.md"]["block_style"])
 
     # shared: .gitignore lines (b) — layer-contributed only
-    gi_lines = [line for n in applied for line in LAYERS[n]["gitignore_lines"]]
+    gi_lines = plan[".gitignore"]["items"]
     if gi_lines:
-        shared.ensure_block(repo / ".gitignore", "\n".join(gi_lines) + "\n", "hash")
+        shared.ensure_block(
+            repo / ".gitignore", "\n".join(gi_lines) + "\n", plan[".gitignore"]["block_style"]
+        )
 
     manifest.write(repo, state)
     return state

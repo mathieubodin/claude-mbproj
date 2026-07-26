@@ -77,6 +77,18 @@ def _markers(style: str) -> tuple[str, str]:
     return (f"{prefix}>>> mbproj:managed (do not edit) >>>", f"{prefix}<<< mbproj:managed <<<")
 
 
+def strip_block(text: str, style: str) -> str:
+    """The text with the mbproj:managed region removed.
+
+    What mbproj wrote on a previous run is not evidence that the project carries the same
+    content by hand, so anything reading a shared file to judge what is already there must
+    look outside the block — otherwise an adopted repo reports itself as duplicating itself.
+    """
+    start, end = _markers(style)
+    pattern = re.compile(re.escape(start) + r".*?" + re.escape(end) + r"\n?", re.DOTALL)
+    return pattern.sub("", text)
+
+
 def ensure_block(path: str | Path, body: str, style: str) -> str:
     """Insert or replace the mbproj:managed block, regenerated in full.
 
