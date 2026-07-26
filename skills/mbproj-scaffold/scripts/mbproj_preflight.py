@@ -85,6 +85,10 @@ UNREADABLE = "unreadable"  # a shared file applying cannot read, so applying sto
 _HEADING = re.compile(r"^[ ]{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
 # The underline of a setext heading — `jq` over `--` is an H2, and carries the same anchor.
 _SETEXT = re.compile(r"^[ ]{0,3}(=+|-+)[ \t]*$")
+# A line that can carry a setext heading: at most three spaces of indent before the text. A
+# tab or a fourth space opens an indented code block, where `jq` over `---` is a sample and a
+# thematic break, not a heading.
+_SETEXT_TEXT = re.compile(r"^[ ]{0,3}\S")
 # An assignment, in every flavour make accepts. Recognised first and skipped, so `VAR ::= x`
 # is never mistaken for a rule on a target named VAR.
 _ASSIGN = re.compile(r"^\s*[^:=#]+\s*(?::{1,3}=|[?+!]=)")
@@ -180,7 +184,7 @@ def _headings(text: str, levels: tuple[int, ...] = (2,)) -> list[str]:
             continue
         if (m := _HEADING.match(line)) and len(m.group(1)) in levels:
             found.append(m.group(2).lower())
-        elif line.strip() and not line.startswith("\t") and index + 1 < len(lines):
+        elif _SETEXT_TEXT.match(line) and index + 1 < len(lines):
             # Setext: the text is on one line and its level on the next. Rarer than ATX, but
             # it produces the same anchor, so a section written that way duplicates the
             # managed block just as literally.
