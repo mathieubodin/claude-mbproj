@@ -45,6 +45,11 @@ def fence_mask(lines: list[str]) -> list[bool]:
     Only a fence of the same character and at least the opening length closes a block, so a
     ``` nested inside a ~~~~ sample does not end it. Indentation is spaces only: a leading tab
     opens an indented code block, it does not indent a fence.
+
+    One knowing divergence from CommonMark: a closing line carrying an info string (```python)
+    is accepted as a close, where the spec treats it as content. Reaching it needs a nested
+    marker of the same character *and* length, which the spec does not allow either — so the
+    difference only shows in a file already malformed for the nesting it attempts.
     """
     mask: list[bool] = []
     fence = ""
