@@ -138,8 +138,12 @@ def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
         writer.write_owned(repo / "prek.toml", build_prek(state), style="hash")
     writer.write_owned(repo / "mbproj.mk", build_mk(state), style="hash")
 
-    # shared: Makefile include (a)
-    shared.ensure_anchor_lines(repo / "Makefile", ["include mbproj.mk"], r"^\s*include\s+mbproj\.mk\s*$")
+    # shared: Makefile include (a) — placed FIRST so a project that gives a generic target
+    # its own recipe wins; make lets the last recipe win, so an include placed last would
+    # silently override the project's.
+    shared.ensure_anchor_lines(
+        repo / "Makefile", ["include mbproj.mk"], r"^\s*include\s+mbproj\.mk\s*$", "prepend"
+    )
 
     # shared: CLAUDE.md imports (a) — seed a title first so a fresh file has an H1
     claude = repo / "CLAUDE.md"

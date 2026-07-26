@@ -37,9 +37,14 @@ update the tooling, never to run it.
   first, then the mechanism is applied.
   - **(a) Anchor line + owned satellite** — when the format supports indirection, mbproj
     injects a single line pointing at an owned file that holds the real content:
-    - `Makefile` → one line `include mbproj.mk`.
+    - `Makefile` → one line `include mbproj.mk`, placed **first**. Placement is semantic
+      here, not cosmetic: GNU make lets the *last* recipe for a target win, so an include
+      placed last would silently override a project's own `build` or `package` recipe with
+      the generic placeholder. Anchoring first lets project definitions take precedence;
+      make then warns, but only when a project actually specializes a target — which is
+      exactly when the override is intended.
     - `CLAUDE.md` → one `@import` line **per applied layer** that carries prose
-      (`@.claude/mbproj/conventions.md`, `@.claude/mbproj/agentic.md`).
+      (`@.claude/mbproj/conventions.md`, `@.claude/mbproj/agentic.md`), appended.
   - **(b) Delimited owned block, regenerated in full** — when no indirection exists, mbproj
     owns a region delimited by `# >>> mbproj:managed (do not edit) >>>` …
     `# <<< mbproj:managed <<<` (the comment prefix follows the file's syntax — `<!-- … -->`

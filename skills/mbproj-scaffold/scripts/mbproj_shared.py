@@ -31,17 +31,35 @@ def _read_or_empty(path: str | Path) -> str:
 
 
 # --- mechanism (a): self-identifying pointer lines ------------------------
-def ensure_anchor_lines(path: str | Path, desired: list[str], identify: str) -> str:
+def ensure_anchor_lines(
+    path: str | Path, desired: list[str], identify: str, position: str = "append"
+) -> str:
     """Reconcile mbproj-owned pointer lines in a shared file.
 
     `identify` is a regex; every existing line it matches is removed, then `desired`
-    (order preserved) is appended after a blank separator. Idempotent; creates the file.
+    (order preserved) is re-inserted, separated by a blank line. Idempotent; creates the file.
+
+    `position` decides where the lines land, and for a Makefile that choice is semantic
+    rather than cosmetic: GNU make lets the *last* recipe for a target win, so an include
+    placed last would override a project's own recipe instead of the reverse. Anchoring
+    first lets project definitions take precedence.
     """
     identify_re = re.compile(identify)
     kept = [ln for ln in _read_or_empty(path).splitlines() if not identify_re.search(ln)]
+    # Removing our line strands the blank separator that surrounded it. Left in place it
+    # would accumulate, and a trailing one makes the file fail the `end-of-file-fixer` hook
+    # this same scaffolder generates — the engine would emit a file its own config rejects.
+    while kept and not kept[-1].strip():
+        kept.pop()
     if desired:
-        separator = [""] if kept and kept[-1].strip() != "" else []
-        result = kept + separator + list(desired)
+        if position == "prepend":
+            while kept and not kept[0].strip():
+                kept.pop(0)
+            separator = [""] if kept else []
+            result = list(desired) + separator + kept
+        else:
+            separator = [""] if kept else []
+            result = kept + separator + list(desired)
     else:
         result = kept
     out = "\n".join(result) + ("\n" if result else "")
@@ -93,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
     p_anchor.add_argument("--identify", required=True, help="regex identifying mbproj lines")
     p_anchor.add_argument("--line", dest="lines", action="append", default=[],
                           help="a desired line (repeatable)")
+    p_anchor.add_argument("--position", choices=("append", "prepend"), default="append",
+                          help="where to place the lines (prepend for Makefile includes)")
 
     p_block = sub.add_parser("block", help="regenerate the mbproj:managed block (b)")
     p_block.add_argument("path", type=Path)
@@ -103,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.cmd == "anchor":
-        ensure_anchor_lines(args.path, args.lines, args.identify)
+        ensure_anchor_lines(args.path, args.lines, args.identify, args.position)
     else:
         body = sys.stdin.read() if args.stdin else args.body_file.read_text(encoding="utf-8")
         ensure_block(args.path, body, args.style)
