@@ -35,14 +35,15 @@ _lint_yaml: _check_yq
 	@find . -type f \( -name '*.yaml' -o -name '*.yml' \) $(_MBPROJ_EXCLUDES) -exec yq 'true' {} + >/dev/null
 
 # Shell is matched two ways, deliberately disjoint.
-#   By extension — no executable bit required, because a sourced library (scripts/lib.bash)
-#   is never executable by design, and the bit is also lost through tarballs, zips, cp, or
-#   core.fileMode=false.
+#   By extension — no executable bit required: matching a name costs nothing, and a sourced
+#   library (scripts/lib.bash) is never executable by design.
 #   By shebang, restricted to executables — scripts named without a suffix (bin/provision)
-#   are the common case in infrastructure repos. Requiring the bit here is what keeps the
-#   scan cheap: without it every file in the tree pays a read on every commit. Template and
-#   documentation suffixes are excluded, since a .j2/.in/.tpl legitimately starts with a
-#   shebang while not being valid shell.
+#   are the common case in infrastructure repos. The bit is required here for cost alone:
+#   without it every file in the tree is read on every commit (16s against 0.6s, measured
+#   on 5,000 files). Template and documentation suffixes are excluded, since a .j2/.in/.tpl
+#   legitimately starts with a shebang while not being valid shell.
+#   Accepted blind spot, and the price of that cost: a script with no shell extension whose
+#   executable bit was lost — through a zip, a cp, or core.fileMode=false — is not linted.
 # Reads are byte-bounded (a one-line 300MB dump must not be read whole), and the file list
 # is NUL-delimited end to end, so names with spaces, quotes, newlines or glob metacharacters
 # cannot split, break xargs, or expand into unrelated files.
