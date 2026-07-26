@@ -5,6 +5,10 @@ config:
   # Default rule set on; MD013 (line length) off - prose is not hard-wrapped.
   default: true
   MD013: false
+  # A generated changelog repeats the same group headings in every release
+  # section, so only flag duplicates within one section.
+  MD024:
+    siblings_only: true
 
 # Vendored / generated directories excluded from linting.
 ignores:

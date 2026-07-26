@@ -6,6 +6,15 @@ history — do not edit by hand.
 
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- *(skill)* Guard the agentic install on project settings, not the plugin list
+- *(skill)* Stop promising a format target the tooling does not provide
+- *(skill)* Place the Makefile include first so projects can specialize targets
+- *(skill)* Lint shell by extension and shebang, not by extension alone
+
+## [claude-mbproj--v0.1.0] - 2026-07-25
+
 ### 🚀 Features
 
 - *(skill)* U1 — engine core (manifest + owned-file writer + banner)
@@ -32,6 +41,7 @@ history — do not edit by hand.
 - Sync the spine with the implementation and name the marketplace
 - *(changelog)* Regenerate after the v1 review pass
 - *(solutions)* Capture the installed-but-broken tooling diagnosis
+- *(changelog)* Regenerate for the v0.1.0 release
 
 ### ⚙️ Miscellaneous Tasks
 

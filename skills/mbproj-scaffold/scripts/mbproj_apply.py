@@ -70,6 +70,10 @@ def build_markdownlint(state: dict) -> str:
         "  # Default rule set on; MD013 (line length) off - prose is not hard-wrapped.",
         "  default: true",
         "  MD013: false",
+        "  # A generated changelog repeats the same group headings in every release",
+        "  # section, so only flag duplicates within one section.",
+        "  MD024:",
+        "    siblings_only: true",
         "",
         "# Vendored / generated directories excluded from linting.",
         "ignores:",
@@ -112,6 +116,10 @@ def build_prek(state: dict) -> str:
 
 def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
     state = manifest.read(repo)
+    # The manifest keeps the version it was written with, so an upgrade would otherwise
+    # freeze it at the first install and every layer would keep re-recording that stale
+    # value. Applying is what stamps the running plugin's version.
+    state["plugin_version"] = common.plugin_version()
     if project_name is not None:
         state["params"]["project_name"] = project_name
     if vendored is not None:
