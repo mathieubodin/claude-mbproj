@@ -26,7 +26,7 @@ The report separates them because their consequences are not comparable.
 | Class | Reported as | What happens if you ignore it |
 | --- | --- | --- |
 | Hand-written owned file | `overwrite-handwritten` | **The file is replaced.** Content is lost |
-| Unwritable path | `blocked` / `unreadable` | Applying dies part-way, leaving the repo half written |
+| Unwritable path | `blocked` / `unreadable` | Nothing runs at all: this one cannot be acknowledged |
 | Tool section already documented | `duplicate` in `SETUP_ENV.md` | `make lint` fails on MD024 |
 | Target the socle also defines | `collision` in `Makefile` | make warns; your recipe wins, the generic one is shadowed |
 | Prose the imports also carry | `review` in `CLAUDE.md` | Nothing breaks; the project says the same thing twice |
@@ -40,7 +40,9 @@ stops there, because deciding what to keep in your own Makefile is a judgement c
    something the generic one does not? If yes, move that content somewhere mbproj does not own
    — a project rule file, a section of your `CLAUDE.md`. If no, let it be replaced.
 2. **Clear the blocked paths.** A directory sitting where a file belongs, or a file that cannot
-   be read: these fail mid-apply, so they have to go before anything else runs.
+   be read. `--acknowledge-conflicts` does **not** cover these, by design: accepting a loss is
+   a decision you are entitled to make, but a path that cannot be written is not a loss to
+   accept — saying "go ahead" would only trade a clean refusal for a repo left half written.
 3. **Strip the superseded sections** from `SETUP_ENV.md`. The managed block will carry them,
    and a duplicated heading fails the lint you are about to generate.
 4. **Decide on each colliding target.** Keep yours (the include is anchored first, so it wins),

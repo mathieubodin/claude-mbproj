@@ -320,16 +320,33 @@ def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> d
     return state
 
 
-class PendingConflicts(Exception):
-    """Applying would overwrite hand-written files, and nobody has said that is intended.
+class AdoptionRefused(Exception):
+    """Applying was stopped by the preflight. Carries the report, so a caller can show what
+    it is being asked about instead of a bare refusal."""
 
-    Carries the preflight report so the caller can show *what* it is being asked about
-    instead of a bare refusal.
+    def __init__(self, report: dict, message: str):
+        self.report = report
+        super().__init__(message)
+
+
+class PendingConflicts(AdoptionRefused):
+    """Hand-written files would be overwritten and nobody has said that is intended."""
+
+    def __init__(self, report: dict):
+        super().__init__(report, "applying would overwrite hand-written files")
+
+
+class UnwritablePaths(AdoptionRefused):
+    """A path cannot be written, so applying would stop somewhere in the middle.
+
+    Deliberately *not* acknowledgeable. Accepting a loss is a decision a maintainer is
+    entitled to make; a directory sitting where a file belongs is not a loss to accept but a
+    write that cannot happen, and saying "go ahead" does not make it possible — it only
+    trades a clean refusal for a repo abandoned half written.
     """
 
     def __init__(self, report: dict):
-        self.report = report
-        super().__init__("applying would overwrite hand-written files")
+        super().__init__(report, "applying would fail part-way through")
 
 
 def apply(
@@ -343,12 +360,19 @@ def apply(
     # Adoption is where the non-destructive promise is actually tested, and the maintainer
     # has to say "yes, lose that" before anything is written, not discover it afterwards.
     report = preflight.report(repo, target_layers, project_name, vendored)
-    if (report["conflict_count"] or report["blocked_count"]) and not acknowledged:
+    if report["blocked_count"]:
+        raise UnwritablePaths(report)
+    if report["conflict_count"] and not acknowledged:
         raise PendingConflicts(report)
 
     state = plan_state(repo, target_layers, project_name, vendored)
+    # Sticky: `acknowledged` records that this repo was adopted at the cost of hand-written
+    # content, and that stays true forever. Recomputing it each run would erase it on the
+    # very next one — the overwritten files now carry the banner, so the run reads as clean —
+    # and the only moment anyone needs to know is afterwards.
+    accepted_before = state["adoption"]["preflight"] == manifest.ACKNOWLEDGED
     state["adoption"]["preflight"] = (
-        manifest.ACKNOWLEDGED if report["conflict_count"] else manifest.CLEAN
+        manifest.ACKNOWLEDGED if report["conflict_count"] or accepted_before else manifest.CLEAN
     )
     applied = _applied(state)
 
@@ -436,15 +460,20 @@ def main(argv: list[str] | None = None) -> int:
         # broke part-way through — one wrote nothing, the other may have written half.
         print(exc, file=sys.stderr)
         return 2
-    except PendingConflicts as pending:
+    except AdoptionRefused as refused:
         # 1, like the preflight's own "applying would lose or fail": the question was well
-        # formed and the answer is that this repo is not ready to be written to.
-        print(preflight.render(pending.report), file=sys.stderr)
-        print(
+        # formed and the answer is that this repo is not ready to be written to. The report
+        # goes out either way — a refusal that only says "no" leaves nothing to act on.
+        print(preflight.render(refused.report), file=sys.stderr)
+        remedy = (
             "\nRefusing to write. Re-run with --acknowledge-conflicts once you have moved "
-            "what you want to keep, or accept the loss.",
-            file=sys.stderr,
+            "what you want to keep, or accept the loss."
+            if isinstance(refused, PendingConflicts)
+            else "\nRefusing to write, and this one cannot be acknowledged: these paths "
+            "cannot be written at all, so applying would stop in the middle and leave the "
+            "repo half done. Clear them, then re-run."
         )
+        print(remedy, file=sys.stderr)
         return 1
     print(args.repo)
     return 0

@@ -77,9 +77,15 @@ Scripts in `$SKILL_DIR/scripts/`:
    loss, and only then, add `--acknowledge-conflicts`. Never add it pre-emptively, and never to
    silence a report the user has not seen — it is their answer to record, not your shortcut.
 
-   The outcome lands in the manifest as `[adoption] preflight = "clean" | "acknowledged"`. That
-   is why a re-run on an adopted repo asks nothing: the tree alone cannot tell a file mbproj
-   has always owned from one it overwrote, since both carry the banner afterwards.
+   `--acknowledge-conflicts` covers hand-written files that would be replaced, and **nothing
+   else**. A `blocked` or `unreadable` path is refused whatever the user says: it is not a loss
+   to accept but a write that cannot happen, and forcing it would leave the repo half done.
+   Report it as something to fix, never as something to confirm.
+
+   The outcome lands in the manifest as `[adoption] preflight = "clean" | "acknowledged"`, and
+   `acknowledged` is sticky. That is why a re-run on an adopted repo asks nothing: the tree
+   alone cannot tell a file mbproj has always owned from one it overwrote, since both carry
+   the banner afterwards — recomputing the record would erase it on the very next run.
 7. **Install the agentic tooling** *(only if the `agentic` layer was applied)* — run the guarded
    steps in the next section.
 

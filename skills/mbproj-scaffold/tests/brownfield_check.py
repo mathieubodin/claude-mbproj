@@ -24,6 +24,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import mbproj_apply as apply_mod  # noqa: E402
+import mbproj_manifest as manifest  # noqa: E402
 import mbproj_preflight as preflight  # noqa: E402
 
 LAYERS = ["lint_format", "guards", "changelog", "agentic"]
@@ -190,6 +191,43 @@ def check_report(root: Path, fail) -> None:
         fail("applying a conflicted repo was not refused")
 
 
+def check_gate(root: Path, fail) -> None:
+    """What acknowledgement covers, and what it must not.
+
+    Both cases here were live defects: a blocked path could be forced past the gate, leaving
+    the repo half written, and the acknowledgement was erased by the next run.
+    """
+    (root / ".claude").mkdir(parents=True)
+    (root / ".claude" / "mbproj").write_text("not a directory\n", encoding="utf-8")
+
+    before = sorted(p.relative_to(root).as_posix() for p in root.rglob("*"))
+    try:
+        apply_mod.apply(root, ["lint_format"], project_name="blocked", acknowledged=True)
+    except apply_mod.UnwritablePaths:
+        pass
+    except OSError as exc:
+        # The gate let it through and the write died where the report said it would. Caught
+        # so this reads as the defect it is, rather than as the check itself crashing.
+        fail(f"an unwritable path got past the gate and applying died on it: {exc!r}")
+    else:
+        fail("an unwritable path was acknowledged past the gate")
+    after = sorted(p.relative_to(root).as_posix() for p in root.rglob("*"))
+    if before != after:
+        fail(f"the refused run still wrote: {sorted(set(after) - set(before))}")
+
+    # Sticky acknowledgement: once the overwritten files carry the banner, the next run reads
+    # as clean, which is exactly when the record must not be recomputed.
+    adopted = root.parent / "adopted"
+    adopted.mkdir()
+    (adopted / "prek.toml").write_text("# hand-written\n", encoding="utf-8")
+    apply_mod.apply(adopted, ["lint_format", "guards"], project_name="a", acknowledged=True)
+    for run in range(2):
+        apply_mod.apply(adopted, ["lint_format", "guards"], project_name="a")
+        outcome = manifest.read(adopted)["adoption"]["preflight"]
+        if outcome != manifest.ACKNOWLEDGED:
+            fail(f"acknowledgement lost after re-run {run + 1}: recorded {outcome!r}")
+
+
 def _expand(root: Path, target: str) -> str:
     result = subprocess.run(
         ["make", "-C", str(root), "-n", target],
@@ -235,6 +273,10 @@ def main() -> int:
         brownfield.mkdir()
         build_fixture(brownfield)
         check_report(brownfield, fail)
+
+        gate = Path(tmp) / "gate"
+        gate.mkdir()
+        check_gate(gate, fail)
 
         extension = Path(tmp) / "extension"
         extension.mkdir()
