@@ -9,11 +9,17 @@ the preflight says so in one line.
 
 ## The preflight decides whether you have work to do
 
-Run it before applying. It writes nothing:
+Run it before applying, from the plugin checkout. It writes nothing:
 
 ```bash
-python3 "$SKILL_DIR/scripts/mbproj_apply.py" <repo> --layer lint_format --preflight
+python3 skills/mbproj-scaffold/scripts/mbproj_apply.py <repo> \
+  --layer lint_format --layer guards --layer changelog --layer agentic --preflight
 ```
+
+**Pass the layers you actually intend to apply.** Each one claims its own files, so a preflight
+run with fewer layers cannot warn about the others: ask about `lint_format` alone and a blocked
+`cliff.toml` stays invisible until `changelog` is applied and the engine refuses — over a path
+you were never shown.
 
 Exit `0` means nothing would be lost — apply and move on. Exit `1` means there is a migration
 to do, and the report names every file involved. The engine refuses to write while conflicts

@@ -279,6 +279,67 @@ def check_adopted_is_silent(root: Path, fail) -> None:
         fail(f"a directory on an owned path is classified {status!r}, expected blocked")
 
 
+def _snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        p.relative_to(root).as_posix(): p.read_bytes()
+        for p in sorted(root.rglob("*")) if p.is_file()
+    }
+
+
+def check_writes(root: Path, fail) -> None:
+    """What applying puts on disk — the half a report-shaped test cannot reach.
+
+    Every case here is a defect that shipped: imports accumulating because the writer stopped
+    recognising its own output, a BOM pushed off line 1 killing the project's target, a quoted
+    import deleted, a second H1 seeded into a file that had one, the include anchored last and
+    silently overriding a project recipe, an exclude reaching its three consumers as a doubled
+    separator. None of them changes what the *report* says, which is why they survived a suite
+    built entirely around it.
+    """
+    (root / "Makefile").write_bytes(
+        "﻿all:\n\t@echo hello\n".encode()  # BOM, then the project's own target
+    )
+    (root / "CLAUDE.md").write_text(
+        "<!-- generated notice -->\n\n# Project\n\nProse.\n\n"
+        "```text\n@.claude/mbproj/conventions.md\n```\n",
+        encoding="utf-8",
+    )
+    apply_mod.apply(root, LAYERS, project_name="writes", vendored=["src/generated/"])
+
+    before = _snapshot(root)
+    apply_mod.apply(root, LAYERS, project_name="writes", vendored=["src/generated/"])
+    after = _snapshot(root)
+    if before != after:
+        changed = sorted(k for k in before | after.keys() if before.get(k) != after.get(k))
+        fail(f"applying twice was not byte-identical: {changed}")
+
+    makefile = (root / "Makefile").read_text(encoding="utf-8")
+    if not makefile.startswith("﻿"):
+        fail("the BOM did not stay on the first line")
+    # The BOM is not a line of its own — it prefixes the first one, which is where the include
+    # has to be for a project recipe to win over the generic one.
+    if makefile.lstrip("﻿").splitlines()[0].strip() != "include mbproj.mk":
+        fail(f"the include is not anchored first: {makefile.splitlines()[:3]}")
+    if "all:" not in makefile:
+        fail("the project's own target did not survive")
+
+    claude = (root / "CLAUDE.md").read_text(encoding="utf-8")
+    if claude.count("@.claude/mbproj/conventions.md") != 2:
+        fail("the quoted import was not preserved beside the real anchor")
+    if claude.count("\n# ") + claude.startswith("# ") != 1:
+        fail(f"seeding added a second H1:\n{claude}")
+
+    # One malformed entry, three consumers: the doubled separator each reads differently is
+    # why normalisation happens once, at the source. Matched on the entry itself rather than
+    # on any `//`, which also occurs in the URLs these files legitimately carry.
+    for name in (".markdownlint-cli2.yaml", "prek.toml", "mbproj.mk"):
+        text = (root / name).read_text(encoding="utf-8")
+        if "src/generated//" in text:
+            fail(f"{name} carries a doubled separator from an un-normalised exclude")
+        if "src/generated" not in text:
+            fail(f"{name} does not carry the vendored exclude at all")
+
+
 def check_gate(root: Path, fail) -> None:
     """What acknowledgement covers, and what it must not.
 
@@ -341,13 +402,29 @@ def check_extension_pattern(root: Path, fail) -> None:
     if "markdownlint-cli2 not found" not in expansion:
         fail(f"the generated checks stopped running:\n{expansion}")
 
-    # The counter-example: without it, a make that never warns would pass the check above.
+    # The claim least likely to be true, and so the one most worth checking: prerequisites
+    # merge whatever the order, unlike recipes, where last wins and the include's placement is
+    # the whole reason it is anchored first.
+    (root / "Makefile").write_text(
+        "check-dev-env: _check_project\n\n_check_project:\n"
+        '\t@echo "project check"\n\ninclude mbproj.mk\n',
+        encoding="utf-8",
+    )
+    expansion = _expand(root, "check-dev-env")
+    if "overriding recipe" in expansion or "project check" not in expansion:
+        fail(f"the extension stopped working with the include placed last:\n{expansion}")
+
+    # The counter-example: without it, a make that never warns would pass the checks above.
+    # Note what it does *not* claim — the generated prerequisites still run; only the recipe
+    # is replaced, which is why the warning is the signal rather than a broken build.
     (root / "Makefile").write_text(
         'include mbproj.mk\n\ncheck-dev-env:\n\t@echo "mine"\n', encoding="utf-8"
     )
     expansion = _expand(root, "check-dev-env")
     if "overriding recipe" not in expansion:
         fail(f"redefining a recipe was expected to warn, and did not:\n{expansion}")
+    if "markdownlint-cli2 not found" not in expansion:
+        fail(f"the generated prerequisites were expected to survive an override:\n{expansion}")
 
 
 def main() -> int:
@@ -367,6 +444,10 @@ def main() -> int:
         adopted = Path(tmp) / "adopted"
         adopted.mkdir()
         check_adopted_is_silent(adopted, fail)
+
+        writes = Path(tmp) / "writes"
+        writes.mkdir()
+        check_writes(writes, fail)
 
         gate = Path(tmp) / "gate"
         gate.mkdir()
