@@ -13,3 +13,6 @@ agentic = { applied = false }
 [params]
 project_name = "claude-mbproj"
 vendored_dirs = ["skills/mbproj-scaffold/templates"]
+
+[adoption]
+preflight = "clean"

@@ -28,7 +28,12 @@ SKILL_DIR="${CLAUDE_SKILL_DIR:-$CLAUDE_PLUGIN_ROOT/skills/mbproj-scaffold}"
 Scripts in `$SKILL_DIR/scripts/`:
 
 - `mbproj_manifest.py` — read/write the `.config/mbproj.toml` manifest (source of truth).
+- `mbproj_apply.py` — compose and write everything a layer set implies; also the preflight gate.
+- `mbproj_preflight.py` — report what applying would do, writing nothing.
+- `mbproj_layers.py` — the layer registry: owned files, tools, shared-file contributions.
+- `mbproj_shared.py` — the two I3 shared-file mechanisms (anchor lines, managed block).
 - `mbproj_writer.py` — write an owned file with the do-not-edit banner.
+- `mbproj_common.py` — plugin root, version, atomic writes, banner rendering.
 
 ## Flow
 
@@ -41,7 +46,22 @@ Scripts in `$SKILL_DIR/scripts/`:
    `vendored_dirs` (ask the user). Persist with the `set-param` subcommand.
 4. **Present the current state** and let the user pick which layers to add or update, enforcing
    the dependency chain `lint_format → guards → changelog` (`agentic` is independent).
-5. **Apply the selected layers** — run the composition engine, which writes every owned file
+5. **Preflight** — before writing anything into a repo that is not empty, run the same command
+   with `--preflight`. It writes nothing and prints what applying would do:
+
+   ```bash
+   python3 "$SKILL_DIR/scripts/mbproj_apply.py" <repo> \
+     --layer <name> [--layer <name> ...] \
+     --project-name <name> [--vendored-dir <dir> ...] --preflight
+   ```
+
+   Exit `0` means nothing would be lost — say so in one line and move on. Exit `1` means
+   hand-written files would be overwritten, or a path cannot be written: **show the report and
+   stop**. Do not summarise it away; the file list is the point. Ask the user whether to move
+   what they want to keep, or accept the loss. Exit `2` is a malformed invocation — fix the
+   command, do not report it as a finding.
+
+6. **Apply the selected layers** — run the composition engine, which writes every owned file
    and shared-file contribution and updates the manifest:
 
    ```bash
@@ -51,7 +71,16 @@ Scripts in `$SKILL_DIR/scripts/`:
    ```
 
    Dependencies are enforced (`lint_format → guards → changelog`; `agentic` is independent).
-6. **Install the agentic tooling** *(only if the `agentic` layer was applied)* — run the guarded
+
+   The engine runs the preflight itself and **refuses to write** when it finds conflicts, so a
+   forgotten step 5 cannot cost anyone their files. Once the user has explicitly accepted the
+   loss, and only then, add `--acknowledge-conflicts`. Never add it pre-emptively, and never to
+   silence a report the user has not seen — it is their answer to record, not your shortcut.
+
+   The outcome lands in the manifest as `[adoption] preflight = "clean" | "acknowledged"`. That
+   is why a re-run on an adopted repo asks nothing: the tree alone cannot tell a file mbproj
+   has always owned from one it overwrote, since both carry the banner afterwards.
+7. **Install the agentic tooling** *(only if the `agentic` layer was applied)* — run the guarded
    steps in the next section.
 
 ## Agentic layer — tooling install

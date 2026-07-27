@@ -29,11 +29,20 @@ MANIFEST_REL = Path(".config") / "mbproj.toml"
 LAYER_ORDER = ("lint_format", "guards", "changelog", "agentic")
 
 
+CLEAN = "clean"  # the preflight found nothing that applying would destroy
+ACKNOWLEDGED = "acknowledged"  # it found conflicts and someone said to go ahead anyway
+
+
 def default_state() -> dict:
     return {
         "plugin_version": common.plugin_version(),
         "layers": {name: {"applied": False} for name in LAYER_ORDER},
         "params": {"project_name": "", "vendored_dirs": []},
+        # What the preflight concluded on the run that last wrote this repo. Recorded so the
+        # next run can tell "nothing was ever at risk here" from "someone accepted a loss",
+        # which the tree alone cannot say: once overwritten, a hand-written file carries the
+        # banner and is indistinguishable from one mbproj has always owned.
+        "adoption": {"preflight": ""},
     }
 
 
@@ -61,6 +70,8 @@ def read(repo_root: Path) -> dict:
     state["params"]["vendored_dirs"] = (
         [str(x) for x in vendored] if isinstance(vendored, list) else []
     )
+    outcome = str(raw.get("adoption", {}).get("preflight", ""))
+    state["adoption"]["preflight"] = outcome if outcome in (CLEAN, ACKNOWLEDGED) else ""
     return state
 
 
@@ -87,6 +98,11 @@ def serialize(state: dict) -> str:
     lines += ["", "[params]"]
     lines.append(f'project_name = {_toml_str(state["params"]["project_name"])}')
     lines.append(f'vendored_dirs = {_toml_array(state["params"]["vendored_dirs"])}')
+    # Omitted while empty, so a manifest written before adoption tracking existed does not
+    # gain a meaningless line, and a repo that never ran through the engine keeps a manifest
+    # that says nothing about a preflight that never happened.
+    if state["adoption"]["preflight"]:
+        lines += ["", "[adoption]", f'preflight = {_toml_str(state["adoption"]["preflight"])}']
     return "\n".join(lines) + "\n"
 
 

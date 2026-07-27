@@ -320,8 +320,36 @@ def plan_state(repo: Path, target_layers, project_name=None, vendored=None) -> d
     return state
 
 
-def apply(repo: Path, target_layers, project_name=None, vendored=None) -> dict:
+class PendingConflicts(Exception):
+    """Applying would overwrite hand-written files, and nobody has said that is intended.
+
+    Carries the preflight report so the caller can show *what* it is being asked about
+    instead of a bare refusal.
+    """
+
+    def __init__(self, report: dict):
+        self.report = report
+        super().__init__("applying would overwrite hand-written files")
+
+
+def apply(
+    repo: Path, target_layers, project_name=None, vendored=None, acknowledged: bool = False
+) -> dict:
+    # Imported here rather than at module load: the preflight imports this module to learn
+    # what applying would write, so importing it back at the top would close the cycle.
+    import mbproj_preflight as preflight
+
+    # The preflight is not an optional extra a caller may forget to run — it is the gate.
+    # Adoption is where the non-destructive promise is actually tested, and the maintainer
+    # has to say "yes, lose that" before anything is written, not discover it afterwards.
+    report = preflight.report(repo, target_layers, project_name, vendored)
+    if (report["conflict_count"] or report["blocked_count"]) and not acknowledged:
+        raise PendingConflicts(report)
+
     state = plan_state(repo, target_layers, project_name, vendored)
+    state["adoption"]["preflight"] = (
+        manifest.ACKNOWLEDGED if report["conflict_count"] else manifest.CLEAN
+    )
     applied = _applied(state)
 
     for dest, content in owned_plan(state).items():
@@ -379,6 +407,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project-name", default=None)
     parser.add_argument("--vendored-dir", dest="vendored", action="append", default=None,
                         help="a vendored directory to exclude from linting (repeatable)")
+    parser.add_argument("--preflight", action="store_true",
+                        help="report what applying would do, then exit without writing")
+    parser.add_argument("--acknowledge-conflicts", dest="acknowledged", action="store_true",
+                        help="apply even though hand-written files would be overwritten")
     args = parser.parse_args(argv)
 
     repo = args.repo.resolve()
@@ -388,14 +420,32 @@ def main(argv: list[str] | None = None) -> int:
     if not repo.is_dir():
         parser.error(f"{args.repo} is not a directory")
 
+    import mbproj_preflight as preflight  # see `apply` for why this is not a top-level import
+
     try:
-        apply(repo, args.layers, args.project_name, args.vendored)
+        if args.preflight:
+            # The same report the gate consults, printed instead of acted on. One code path,
+            # so what a caller inspects cannot differ from what applying would enforce.
+            result = preflight.report(repo, args.layers, args.project_name, args.vendored)
+            print(preflight.render(result))
+            return 1 if result["conflict_count"] or result["blocked_count"] else 0
+        apply(repo, args.layers, args.project_name, args.vendored, args.acknowledged)
     except SystemExit as exc:  # a rejected layer set is a usage error, not a failed apply
         # Same convention as the preflight: 2 means the question was malformed. Left as the
         # default 1, a caller could not tell a rejected dependency chain from a run that
         # broke part-way through — one wrote nothing, the other may have written half.
         print(exc, file=sys.stderr)
         return 2
+    except PendingConflicts as pending:
+        # 1, like the preflight's own "applying would lose or fail": the question was well
+        # formed and the answer is that this repo is not ready to be written to.
+        print(preflight.render(pending.report), file=sys.stderr)
+        print(
+            "\nRefusing to write. Re-run with --acknowledge-conflicts once you have moved "
+            "what you want to keep, or accept the loss.",
+            file=sys.stderr,
+        )
+        return 1
     print(args.repo)
     return 0
 
