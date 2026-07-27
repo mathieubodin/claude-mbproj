@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """Prove the preflight against a brownfield repo, and the extension pattern against make.
 
-Adopting the reference project by hand hit five classes of conflict (spine `docs/adoption.md`).
-This builds a repo carrying all five and asserts the report names them — the fixture is
-generated rather than committed so it cannot drift from the layer registry it is written
-against, and so it never has to be excluded from the lint that runs over this repo.
+Four things are checked, and the split matters — each covers what the others structurally
+cannot:
 
-The second half checks the claim `docs/adoption.md` makes about extending a generated target:
-adding a prerequisite does not override the recipe. That is asserted against `make -n`
-expansion rather than by reading the manual, and the counter-example — redefining the recipe —
-is checked too, since a test that only confirms the happy path would pass on a broken make.
+- **The report, end to end.** Adopting the reference project by hand hit five classes of
+  conflict (`docs/adoption.md`); a repo carrying all five must have each one named. The fixture
+  is generated rather than committed, so it cannot drift from the layer registry it is written
+  against, and never has to be excluded from the lint that runs over this repo.
+- **The gate.** That it refuses, that an unwritable path cannot be acknowledged past it, and
+  that the acknowledgement survives the next run.
+- **The parsers, directly.** Every shape that once produced a wrong report gets its own case.
+  Routing these through the fixture would only prove them for the one shape it happens to
+  carry — a fixture with no `define` block, no quoted heading and no unclosed fence passes
+  just as happily with those defects restored. This half exists because a mutation run showed
+  the end-to-end half catching two of thirteen.
+- **make itself.** The claim `docs/adoption.md` makes about extending a generated target is
+  asserted against `make -n` expansion rather than by reading the manual, counter-example
+  included: a test that only confirms the happy path would pass on a make that never warns.
 
 Run: python3 skills/mbproj-scaffold/tests/brownfield_check.py
 """
@@ -87,7 +95,12 @@ Install it.
 
 Install it.
 
-## shellcheck
+## Tools filed under a chapter
+
+A project may nest its tool sections one level down; the anchor is the same, so the managed
+block would still restate them.
+
+### shellcheck
 
 Install it.
 
@@ -191,6 +204,81 @@ def check_report(root: Path, fail) -> None:
         fail("applying a conflicted repo was not refused")
 
 
+# Each entry is a defect that reached a released commit, with the form that revealed it. An
+# end-to-end fixture cannot stand in for these: it would have to contain every shape at once,
+# and a missing shape reads as a passing test rather than as an untested one.
+MAKE_FORMS = [
+    ("two targets on one line", "lint build:\n\t@echo x\n", {"lint", "build"}),
+    ("backslash continuation", "lint \\\n build:\n\t@echo x\n", {"lint", "build"}),
+    ("space-indented rule", "  lint:\n\t@echo x\n", {"lint"}),
+    ("internal targets", "_lint_json:\n\t@echo x\n_check_jq:\n\t@echo y\n",
+     {"_lint_json", "_check_jq"}),
+    ("double colon", "clean::\n\t@echo x\n", {"clean"}),
+    ("function call carrying a colon", "$(info build: starting)\n$(warning lint: old)\n", set()),
+    ("define body", "define USAGE\n  build: compile\n  lint: check\nendef\n", set()),
+    ("assignments", "VAR ::= x\nT :::= y\nQ ?= @\nlint := no\n", set()),
+    ("pattern rule", "%.o: %.c\n\t@echo x\n", set()),
+    ("dot directive", ".PHONY: lint build\n", set()),
+    ("recipe holding a colon", "real:\n\t@echo \"checking: files\"\n", {"real"}),
+]
+
+HEADING_FORMS = [
+    ("plain atx", "## jq\n", ["jq"]),
+    ("closed atx", "## jq ##\n", ["jq"]),
+    ("space-indented atx", "   ## jq\n", ["jq"]),
+    ("setext", "jq\n--\n", ["jq"]),
+    ("inside a fence", "```text\n## jq\n```\n", []),
+    ("inside a tilde fence", "~~~\n## jq\n~~~\n", []),
+    ("tab-indented code block", "text:\n\n\t## jq\n", []),
+    ("four-space code block over a break", "text:\n\n    jq\n---\n", []),
+    ("front matter", "---\ntitle: jq\n---\n", []),
+    ("after an unclosed fence", "```text\nopen\n\n## jq\n", ["jq"]),
+    ("closed block above an unclosed one", "```text\n## jq\n```\n\n```text\nopen\n", []),
+]
+
+
+def check_parsers(fail) -> None:
+    """The parser behaviours, each pinned to the defect that produced it.
+
+    Tested directly rather than through the fixture: these are properties of how a Makefile
+    and a Markdown file are read, and routing them through an end-to-end report only proves
+    them for the one shape the fixture happens to carry.
+    """
+    for label, text, expected in MAKE_FORMS:
+        got = preflight._make_targets(text)
+        if got != expected:
+            fail(f"make parser, {label}: got {sorted(got)}, expected {sorted(expected)}")
+
+    for label, text, expected in HEADING_FORMS:
+        got = preflight._headings(text, levels=(1, 2, 3, 4, 5, 6))
+        if got != expected:
+            fail(f"heading parser, {label}: got {got}, expected {expected}")
+
+
+def check_adopted_is_silent(root: Path, fail) -> None:
+    """An adopted repo must not report itself as duplicating what mbproj wrote into it.
+
+    The managed block is stripped before judging, and nothing else exercises that: a fixture
+    built from scratch has no block to strip, so the check would pass with the stripping gone.
+    """
+    apply_mod.apply(root, LAYERS, project_name="adopted")
+    report = preflight.report(root, LAYERS, project_name="adopted")
+    noisy = [r["path"] for r in report["shared"] if r["findings"]]
+    if noisy:
+        fail(f"an adopted repo reports findings against itself: {noisy}")
+    if report["conflict_count"] or report["blocked_count"]:
+        fail(f"an adopted repo reports conflicts: {report}")
+
+    # A directory on an owned path is a write that cannot happen, not content to weigh up.
+    owned_dir = root / "prek.toml"
+    owned_dir.unlink()
+    owned_dir.mkdir()
+    status = next(r["status"] for r in preflight.classify_owned(root, apply_mod.plan_state(
+        root, LAYERS, "adopted", None)) if r["path"] == "prek.toml")
+    if status != preflight.BLOCKED:
+        fail(f"a directory on an owned path is classified {status!r}, expected blocked")
+
+
 def check_gate(root: Path, fail) -> None:
     """What acknowledgement covers, and what it must not.
 
@@ -217,7 +305,7 @@ def check_gate(root: Path, fail) -> None:
 
     # Sticky acknowledgement: once the overwritten files carry the banner, the next run reads
     # as clean, which is exactly when the record must not be recomputed.
-    adopted = root.parent / "adopted"
+    adopted = root.parent / "sticky"
     adopted.mkdir()
     (adopted / "prek.toml").write_text("# hand-written\n", encoding="utf-8")
     apply_mod.apply(adopted, ["lint_format", "guards"], project_name="a", acknowledged=True)
@@ -273,6 +361,12 @@ def main() -> int:
         brownfield.mkdir()
         build_fixture(brownfield)
         check_report(brownfield, fail)
+
+        check_parsers(fail)
+
+        adopted = Path(tmp) / "adopted"
+        adopted.mkdir()
+        check_adopted_is_silent(adopted, fail)
 
         gate = Path(tmp) / "gate"
         gate.mkdir()

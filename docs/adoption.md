@@ -19,9 +19,11 @@ Exit `0` means nothing would be lost — apply and move on. Exit `1` means there
 to do, and the report names every file involved. The engine refuses to write while conflicts
 stand, so nothing is at risk while you work through them.
 
-## The five classes, and what each one costs
+## What the report finds, and what each finding costs
 
-The report separates them because their consequences are not comparable.
+Five of these are the collision classes adopting the reference project hit by hand; the sixth,
+an unwritable path, is not a collision but a write that cannot happen. The report separates
+them because their consequences are not comparable.
 
 | Class | Reported as | What happens if you ignore it |
 | --- | --- | --- |
@@ -29,10 +31,12 @@ The report separates them because their consequences are not comparable.
 | Unwritable path | `blocked` / `unreadable` | Nothing runs at all: this one cannot be acknowledged |
 | Tool section already documented | `duplicate` in `SETUP_ENV.md` | `make lint` fails on MD024 |
 | Target the socle also defines | `collision` in `Makefile` | make warns; your recipe wins, the generic one is shadowed |
+| Ignore line the block also carries | `duplicate` in `.gitignore` | Nothing at all — git treats a restated pattern as redundant |
 | Prose the imports also carry | `review` in `CLAUDE.md` | Nothing breaks; the project says the same thing twice |
 
-Only the first two are destructive. The other three are editorial: the tool reports them and
-stops there, because deciding what to keep in your own Makefile is a judgement call.
+Only the first two stop anything. The rest are editorial — the tool reports them and stops
+there, because deciding what to keep in your own Makefile is a judgement call — and the
+`.gitignore` one is editorial to the point of being optional.
 
 ## The migration, in the order that works
 
@@ -50,11 +54,17 @@ stops there, because deciding what to keep in your own Makefile is a judgement c
    use the extension pattern below.
 5. **Read the nominated headings** in `CLAUDE.md`. The imported prose may cover what you wrote,
    or complement it. Nobody but you can tell.
-6. **Apply.** If you chose to let hand-written files be replaced, pass
+6. **Leave the `.gitignore` duplicates alone**, unless tidiness moves you. They are listed for
+   completeness, and cost nothing: git ignores a pattern the same whether it appears once or
+   twice. This is the one class you can close by deciding not to act.
+7. **Apply.** If you chose to let hand-written files be replaced, pass
    `--acknowledge-conflicts` — that flag records your decision in the manifest, it does not
    suppress the question.
-7. **Re-run the preflight.** It should be silent. If it is not, something in step 1–5 was
-   missed.
+8. **Re-run the preflight.** What must be clear is the **gate**: exit `0`, no
+   `overwrite-handwritten`, no `blocked`. The report itself may still carry findings, and on a
+   project that extends a generated target it permanently will — the `check-dev-env`
+   prerequisite from step 4 is a collision by construction, reported for as long as it exists.
+   Expect a quiet gate, not a silent report.
 
 ## Extending a generated target without overriding it
 
@@ -75,11 +85,14 @@ the generated checks and yours run, make emits no warning, and the placement rel
 `include` stops mattering — the ordering rule that governs recipes does not apply here.
 
 Verified by expansion rather than asserted. `make -n check-dev-env` on that form runs the
-generated checks *and* the project's, with no warning. Give `check-dev-env` a recipe of its own
-instead, and make answers `warning: overriding recipe for target 'check-dev-env'` while the
-generated checks stop running altogether. Both halves are exercised by the check below, the
-counter-example included — a test that only confirms the good case would also pass on a make
-that never warns.
+generated checks *and* the project's, with no warning.
+
+Give `check-dev-env` a recipe of its own instead, and make answers `warning: overriding recipe
+for target 'check-dev-env'`. What that costs is narrower than it sounds, and worth stating
+precisely: make merges the *prerequisites* of every rule for a target and replaces only the
+*recipe*, so the generated checks still run — what is lost is the recipe line itself. The
+warning is the real signal, not a broken build. Prefer the prerequisite form anyway: it says
+what you mean, and it keeps the report quiet about a collision you did not need to create.
 
 ## Verifying all of it
 
@@ -87,7 +100,11 @@ that never warns.
 python3 skills/mbproj-scaffold/tests/brownfield_check.py
 ```
 
-It builds a repository carrying all five conflict classes, asserts the report names each one,
-asserts the engine refuses to write, and checks the extension pattern against `make -n`. The
-fixture is generated rather than committed, so it cannot drift from the layer registry it is
-written against.
+It builds a repository carrying the five collision classes and asserts the report names each
+one, asserts the engine refuses to write and that an unwritable path cannot be acknowledged
+past it, and checks the extension pattern against `make -n`. The fixture is generated rather
+than committed, so it cannot drift from the layer registry it is written against.
+
+It also pins the parser behaviours directly — every shape that once produced a wrong report
+gets its own case, since an end-to-end fixture only proves them for the one shape it happens
+to carry.
