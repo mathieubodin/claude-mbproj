@@ -2,12 +2,12 @@
 # Re-run `/mbproj-scaffold` to update. Managed by the claude-mbproj plugin.
 
 [mbproj]
-plugin_version = "0.1.3"
+plugin_version = "0.2.0"
 
 [layers]
-lint_format = { applied = true, version = "0.1.3" }
-guards = { applied = true, version = "0.1.3" }
-changelog = { applied = true, version = "0.1.3" }
+lint_format = { applied = true, version = "0.2.0" }
+guards = { applied = true, version = "0.2.0" }
+changelog = { applied = true, version = "0.2.0" }
 agentic = { applied = false }
 
 [params]

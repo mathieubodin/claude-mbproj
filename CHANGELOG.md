@@ -6,6 +6,43 @@ history — do not edit by hand.
 
 ## [unreleased]
 
+### 🚀 Features
+
+- *(skill)* Report which owned files applying would overwrite
+- *(skill)* Report what a shared file already carries before adding to it
+- *(skill)* Make the preflight the gate, not an optional extra
+- *(tests)* Prove the brownfield report and the extension pattern, instead of asserting them
+
+### 🐛 Bug Fixes
+
+- *(skill)* Prove authorship by where the banner sits, not whether it appears
+- *(skill)* Read a Makefile the way make reads it, and stop crashing on what cannot be read
+- *(skill)* Stop emitting a tree the generated lint rejects, and align apply's exit codes
+- *(skill)* Stop the rewritten parsers from inventing what a file does not say
+- *(skill)* Stop a shared file from losing content, and seed on a missing title
+- *(skill)* A four-space indent is a code block, not a setext heading
+- *(skill)* Grade a shared finding by the file it is in, not by its status
+- *(skill)* Keep the anchor reconciliation stable when a code fence never closes
+- *(skill)* Distrust only the unclosed fence, not the whole file
+- *(skill)* Stop acknowledgement from covering what it cannot fix, or evaporating
+
+### 📚 Documentation
+
+- *(team)* Record the agent-team configuration instead of rediscovering it
+- *(skill)* Record the one place fence tracking parts from CommonMark
+- *(solutions)* Capture the validation method the epic was actually built with
+
+### 🧪 Testing
+
+- *(skill)* Pin the parser behaviours the end-to-end fixture cannot reach
+- *(skill)* Cover what applying puts on disk, not only what the report says
+
+## [0.1.3] - 2026-07-26
+
+### 🐛 Bug Fixes
+
+- *(skill)* Exclude vendored directories at any depth, and show versions not tags
+
 ### 📚 Documentation
 
 - *(skill)* Warn that an unstaged prek.toml blocks every commit
