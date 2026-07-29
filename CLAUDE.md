@@ -9,4 +9,7 @@ Relevant when implementing or debugging in documented areas.
 `.claude/team.md` — the two teammates that validate every change (brownfield and greenfield),
 and the session configuration they require. Read it before spawning or briefing one.
 
+`CONCEPTS.md` — shared domain vocabulary (owned and shared files, layers, the manifest, the
+preflight). Relevant when orienting to the codebase or discussing its concepts.
+
 @.claude/mbproj/conventions.md
