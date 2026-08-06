@@ -160,8 +160,11 @@ LAYERS["guards"].update(
 
 _CHANGELOG_MK = _mk(
     """\
-changelog: _check_git_cliff ## Regenerate CHANGELOG.md from the git history (git-cliff)
-<TAB>@git-cliff -o CHANGELOG.md
+# A release regenerates the changelog before its tag exists, so git-cliff heads the new
+# section `[unreleased]` and the release commit ships a changelog that never names the
+# version it releases. TAG=<tag> names the version being cut; without it nothing changes.
+changelog: _check_git_cliff ## Regenerate CHANGELOG.md from the git history (git-cliff); TAG=<tag> when releasing
+<TAB>@git-cliff $(if $(TAG),--tag $(TAG)) -o CHANGELOG.md
 <TAB>@echo "OK changelog"
 
 _check_git_cliff:
