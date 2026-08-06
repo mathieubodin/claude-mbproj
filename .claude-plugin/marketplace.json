@@ -11,7 +11,7 @@
     {
       "name": "claude-mbproj",
       "source": "./",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "description": "Scaffold reusable project tooling via /mbproj-scaffold.",
       "author": {
         "name": "Mathieu Bodin"
