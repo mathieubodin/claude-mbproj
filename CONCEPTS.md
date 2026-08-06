@@ -59,6 +59,21 @@ inferred from the tree, because the tree cannot answer every question: once a ha
 has been overwritten it carries the banner and is indistinguishable from one the scaffolder has
 always owned.
 
+### Composed exclude set
+
+The single list of directories a repository keeps out of scope, assembled from generic
+defaults, the contributions of every applied layer, and the vendored directories the project
+declared for itself.
+
+It is composed once and then rendered separately for each tool that consumes it, and those
+renderings are translations rather than reformats — the same entry means different things to a
+path matcher, a glob matcher and a regular-expression engine. A bare name is excluded wherever
+it occurs; an entry written as a path or a glob is excluded only where it says. A
+mistranslation is dangerous in one direction only: an entry that fails to exclude merely costs
+noise, while one that excludes more than it was meant to leaves files no tool ever examines,
+and nothing in any report says so. That asymmetry is why a rendering is pinned by the paths it
+matches rather than by the text it produces.
+
 ## Adoption
 
 ### Preflight
@@ -67,6 +82,12 @@ The report of what applying would do, computed without writing anything, and the
 must pass. It distinguishes what would be *lost* (an owned file written by hand, a path that
 cannot be written) from what would merely be *stated twice* (a duplicated section, a colliding
 target, prose that overlaps). Only the first kind stops a run.
+
+A duplicate is not always merely redundant. Where a file's format forbids restating a
+declaration, the project's hand-written copy and the scaffolder's contribution would together
+make the file unparseable — the tool reading it then fails on everything, with an error that
+resembles nothing the author wrote. Such a case is still reported rather than blocked, which
+is why the report names which duplicate it found instead of only counting them.
 
 ### Acknowledgement
 
