@@ -1,6 +1,6 @@
 {
   "name": "claude-mbproj",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Scaffold reusable project tooling (lint/format, git guards, changelog, agentic workflow) via the /mbproj-scaffold skill. Idempotent, re-entrant, à la carte.",
   "author": {
     "name": "Mathieu Bodin"
