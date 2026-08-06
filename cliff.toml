@@ -82,6 +82,12 @@ protect_breaking_commits = false
 # Assigns commits to groups.
 # Optionally sets the commit's scope and can decide to exclude commits from further processing.
 commit_parsers = [
+    # Must stay FIRST: parsers are evaluated in order and the first match wins.
+    # Placed lower, `docs(changelog)` would be caught by the `^doc` rule below and
+    # filed under Documentation instead of being skipped. Both type prefixes are
+    # covered because projects differ on whether regenerating is a chore or a doc.
+    # Without this the changelog records its own regenerations, one line per run.
+    { message = "^(chore|docs)\\(changelog\\)", skip = true },
     { message = "^feat", group = "<!-- 0 -->🚀 Features" },
     { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
     { message = "^doc", group = "<!-- 3 -->📚 Documentation" },
@@ -90,7 +96,10 @@ commit_parsers = [
     { message = "^style", group = "<!-- 5 -->🎨 Styling" },
     { message = "^test", group = "<!-- 6 -->🧪 Testing" },
     { message = "^build", group = "<!-- 7 -->🏗️ Build" },
-    { message = "^chore\\(release\\): prepare for", skip = true },
+    # Not "^chore\\(release\\): prepare for" — that is standard-version's wording.
+    # The release commits written here read `chore(release): 0.2.0`, which the
+    # narrower pattern missed, so version bumps leaked into the changelog.
+    { message = "^chore\\(release\\)", skip = true },
     { message = "^chore\\(deps.*\\)", skip = true },
     { message = "^chore\\(pr\\)", skip = true },
     { message = "^chore\\(pull\\)", skip = true },
