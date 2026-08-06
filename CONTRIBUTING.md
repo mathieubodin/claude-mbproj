@@ -112,9 +112,54 @@ is generated — never hand-edit it; run `make changelog` instead.
 ## Releasing
 
 Bump the version in **both** `.claude-plugin/plugin.json` and
-`.claude-plugin/marketplace.json` (they must agree), regenerate the changelog, then validate
-the manifests:
+`.claude-plugin/marketplace.json` (they must agree), then regenerate the changelog for the
+version being cut. The tag does not exist yet at this point, so `git-cliff` has to be told
+which version it is writing — without `TAG` it heads the section `[unreleased]` and the
+release commit ships a changelog that never names its own version:
+
+```bash
+make changelog TAG=claude-mbproj--v0.2.1
+```
+
+Commit the bump and the changelog together as `chore(release): 0.2.1`, then validate the
+manifests and tag that commit:
 
 ```bash
 claude plugin validate .
+claude plugin tag .
+```
+
+`claude plugin tag` reads the version from `plugin.json`, refuses to tag unless the
+marketplace entry agrees, and creates the `claude-mbproj--v{version}` tag that the changelog
+headings are parsed from. Push the branch **and** the tag:
+
+```bash
+git push origin main
+git push origin claude-mbproj--v0.2.1
+```
+
+### Reaching installed projects
+
+Pushing is not delivering. Claude Code resolves this plugin from its own clone of the
+repository under `~/.claude/plugins/marketplaces/`, whose `marketplace.json` declares
+`"source": "./"` — the version served is the one on `main` *in that clone*, and tags play no
+part in resolving it. A clone that is never fetched keeps serving its install-time version
+forever, which is how 0.1.1 and 0.2.0 reached no project at all.
+
+Claude Code refreshes a marketplace on its own only when the entry declaring it carries
+`"autoUpdate": true`. Otherwise, refresh and update by hand; `--scope` must match how the
+plugin was installed, which `claude plugin list` reports:
+
+```bash
+claude plugin marketplace update claude-mbproj
+claude plugin update claude-mbproj@claude-mbproj --scope project
+```
+
+Either way the new version applies to the next Claude Code session, not the running one.
+Confirm it landed before calling the release done — and confirm it on a template you
+actually changed, since a correct version number says nothing about the file the skill will
+copy:
+
+```bash
+grep '"version"' ~/.claude/plugins/cache/claude-mbproj/claude-mbproj/*/.claude-plugin/plugin.json
 ```
