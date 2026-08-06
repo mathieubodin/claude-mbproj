@@ -10,7 +10,9 @@ cannot:
   against, and never has to be excluded from the lint that runs over this repo.
 - **The gate.** That it refuses, that an unwritable path cannot be acknowledged past it, and
   that the acknowledgement survives the next run.
-- **The parsers, directly.** Every shape that once produced a wrong report gets its own case.
+- **The parsers and the path translation, directly.** Every shape that once produced a wrong
+  report gets its own case, and so does every exclude form reaching gitleaks as a regex — an
+  allowlist that over-matches leaves files unscanned for secrets while the run stays green.
   Routing these through the fixture would only prove them for the one shape it happens to
   carry — a fixture with no `define` block, no quoted heading and no unclosed fence passes
   just as happily with those defects restored. This half exists because a mutation run showed
@@ -112,6 +114,10 @@ Install it.
 
 Install it.
 
+## gitleaks
+
+Install it.
+
 ## git-cliff
 
 Install it.
@@ -144,6 +150,14 @@ _bmad/**/*.user.toml
 _bmad/**/*.user.yaml
 """
 
+# A project that already extends the default catalogue by hand. TOML forbids a second
+# `[extend]`, so this is the one shared-file duplicate that breaks the file rather than
+# merely restating it.
+GITLEAKS = """\
+[extend]
+useDefault = true
+"""
+
 
 def build_fixture(root: Path) -> None:
     """Write a repo carrying, by hand, an equivalent of everything the four layers bring."""
@@ -155,6 +169,7 @@ def build_fixture(root: Path) -> None:
     (root / "SETUP_ENV.md").write_text(SETUP_ENV, encoding="utf-8")
     (root / "CLAUDE.md").write_text(CLAUDE_MD, encoding="utf-8")
     (root / ".gitignore").write_text(GITIGNORE, encoding="utf-8")
+    (root / ".gitleaks.toml").write_text(GITLEAKS, encoding="utf-8")
 
 
 def _row(report: dict, path: str) -> dict:
@@ -180,7 +195,7 @@ def check_report(root: Path, fail) -> None:
 
     sections = set(_row(report, "SETUP_ENV.md")["findings"])
     expected_sections = {"markdownlint-cli2", "jq", "yq", "shellcheck", "commitlint", "prek",
-                         "git-cliff", "git hooks"}
+                         "gitleaks", "git-cliff", "git hooks"}
     if sections != expected_sections:
         fail(f"SETUP_ENV sections: got {sorted(sections)}, expected {sorted(expected_sections)}")
 
@@ -193,6 +208,10 @@ def check_report(root: Path, fail) -> None:
     ignores = set(_row(report, ".gitignore")["findings"])
     if ignores != {"_bmad/**/*.user.toml", "_bmad/**/*.user.yaml"}:
         fail(f"gitignore duplicates: got {sorted(ignores)}")
+
+    extend = _row(report, ".gitleaks.toml")["findings"]
+    if extend != ["[extend]"]:
+        fail(f"a hand-written [extend] was not reported: got {extend}")
 
     # A report that finds all this and still lets the engine write would make the gate a
     # decoration, so the refusal is part of what is being proved.
@@ -253,6 +272,54 @@ def check_parsers(fail) -> None:
         got = preflight._headings(text, levels=(1, 2, 3, 4, 5, 6))
         if got != expected:
             fail(f"heading parser, {label}: got {got}, expected {expected}")
+
+
+# One exclude entry, and every path it must and must not cover. An allowlist that over-matches
+# is not a cosmetic defect here: the file it wrongly covers is a file never scanned for secrets,
+# and nothing in the output says so — the run is green either way.
+ALLOWLIST_FORMS = [
+    ("bare name, any depth", "node_modules",
+     ["node_modules/pkg/index.js", "web/node_modules/pkg/index.js"],
+     ["node_modules_backup/x.js", "src/node_modules.md"]),
+    # The reason `_regex_exclude` appends a slash. `.git` as a bare prefix also matches
+    # `.github/`, which is where CI workflows — and the tokens they are given — live.
+    ("dot-git must not swallow dot-github", ".git",
+     [".git/config", "sub/.git/config"],
+     [".github/workflows/ci.yml", ".gitignore", ".gitleaks.toml"]),
+    ("located entry, root only", "src/generated",
+     ["src/generated/api.ts"],
+     ["vendor/src/generated/api.ts", "src/generated.ts"]),
+    ("glob stops at the separator", ".claude/skills/bmad-*",
+     [".claude/skills/bmad-core/rules.md"],
+     [".claude/skills/bmad.md", ".claude/skills/mine/bmad-x/rules.md"]),
+    ("explicit ./ means root only", "./vendor",
+     ["vendor/lib.go"],
+     ["third_party/vendor/lib.go"]),
+]
+
+
+def check_allowlist_paths(fail) -> None:
+    """The glob-to-regex translation feeding gitleaks path allowlists.
+
+    Checked against a compiled regex rather than by comparing pattern strings: the question is
+    which paths end up unscanned, and a string comparison would pass on a pattern that is
+    exactly wrong in the way that matters.
+    """
+    import re as _re
+
+    for label, entry, must_match, must_not in ALLOWLIST_FORMS:
+        pattern = apply_mod._regex_exclude(entry)
+        try:
+            compiled = _re.compile(pattern)
+        except _re.error as exc:
+            fail(f"allowlist regex, {label}: {pattern!r} does not compile ({exc})")
+            continue
+        for path in must_match:
+            if not compiled.search(path):
+                fail(f"allowlist regex, {label}: {pattern!r} does not exclude {path!r}")
+        for path in must_not:
+            if compiled.search(path):
+                fail(f"allowlist regex, {label}: {pattern!r} wrongly excludes {path!r}")
 
 
 def check_adopted_is_silent(root: Path, fail) -> None:
@@ -332,7 +399,7 @@ def check_writes(root: Path, fail) -> None:
     # One malformed entry, three consumers: the doubled separator each reads differently is
     # why normalisation happens once, at the source. Matched on the entry itself rather than
     # on any `//`, which also occurs in the URLs these files legitimately carry.
-    for name in (".markdownlint-cli2.yaml", "prek.toml", "mbproj.mk"):
+    for name in (".markdownlint-cli2.yaml", "prek.toml", "mbproj.mk", ".gitleaks.toml"):
         text = (root / name).read_text(encoding="utf-8")
         if "src/generated//" in text:
             fail(f"{name} carries a doubled separator from an un-normalised exclude")
@@ -440,6 +507,7 @@ def main() -> int:
         check_report(brownfield, fail)
 
         check_parsers(fail)
+        check_allowlist_paths(fail)
 
         adopted = Path(tmp) / "adopted"
         adopted.mkdir()

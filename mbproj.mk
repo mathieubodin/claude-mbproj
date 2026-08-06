@@ -6,7 +6,7 @@
 
 _MBPROJ_EXCLUDES := ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/.idea/*" ! -path "*/.vscode/*" ! -path "./skills/mbproj-scaffold/templates/*"
 
-check-dev-env: _check_markdownlint _check_jq _check_yq _check_shellcheck _check_prek _check_commitlint _check_git_cliff ## Verify required tools are installed
+check-dev-env: _check_markdownlint _check_jq _check_yq _check_shellcheck _check_prek _check_commitlint _check_gitleaks _check_git_cliff ## Verify required tools are installed
 	@echo "OK check-dev-env"
 
 help: ## Display all available targets
@@ -74,7 +74,7 @@ _check_yq:
 _check_shellcheck:
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found - see SETUP_ENV.md#shellcheck"; exit 1; }
 
-install-hooks: _check_prek _check_commitlint ## Install git hooks (prek: pre-commit + commit-msg)
+install-hooks: _check_prek _check_commitlint _check_gitleaks ## Install git hooks (prek: pre-commit + commit-msg)
 	@hp=$$(git config --get core.hooksPath 2>/dev/null || true); \
 	if [ -n "$$hp" ]; then git config --local core.hooksPath .git/hooks; fi; \
 	prek install --hook-type pre-commit --hook-type commit-msg; rc=$$?; \
@@ -86,6 +86,9 @@ _check_prek:
 
 _check_commitlint:
 	@command -v commitlint >/dev/null 2>&1 || { echo "commitlint not found - see SETUP_ENV.md#commitlint"; exit 1; }
+
+_check_gitleaks:
+	@command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not found - see SETUP_ENV.md#gitleaks"; exit 1; }
 
 # A release regenerates the changelog before its tag exists, so git-cliff heads the new
 # section `[unreleased]` and the release commit ships a changelog that never names the

@@ -54,6 +54,9 @@ update the tooling, never to run it.
     - `SETUP_ENV.md` → the `_check_*` fix messages reference `SETUP_ENV.md#<tool>` anchors, so
       the generic tool sections **must** live inside the file (indirection would break the
       anchors).
+    - `.gitleaks.toml` → gitleaks reads one config from the repo root, and the default rule
+      catalogue covers no project's own credentials. Owning the file outright would delete a
+      project's `[[rules]]` on every re-run, so mbproj owns only the block.
 
     Regenerating the block in full (not line-appending) is what keeps it idempotent: obsolete
     entries (e.g. a removed `vendored_dirs` value) disappear instead of lingering.
@@ -88,7 +91,8 @@ of any layer.
   `.claude/mbproj/conventions.md`, `mbproj.mk` (build/package/clean/lint),
   `.markdownlint-cli2.yaml`, `.shellcheckrc`. Tools: `markdownlint-cli2`, `jq`, `yq`, `shellcheck`.
 - **`guards`** (depends on: `lint_format`) — owned: `prek.toml`, `commitlint.config.js`,
-  `mbproj.mk` (install-hooks). Tools: `prek`, `commitlint`.
+  `mbproj.mk` (install-hooks); shared: `.gitleaks.toml` (I3(b)). Tools: `prek`, `commitlint`,
+  `gitleaks`.
 - **`changelog`** (depends on: `guards`) — owned: `cliff.toml`, `mbproj.mk` (changelog).
   Tools: `git-cliff`.
 - **`agentic`** (independent) — owned: `.claude/mbproj/agentic.md` (Agentic Workflow only);
@@ -112,6 +116,10 @@ Each layer injects into shared files as follows; contributions are composed (I8)
 - **`SETUP_ENV.md`** — I3(b): tool install sections for the applied layers' tools (composed).
 - **`.gitignore`** — I3(b): mbproj ignore lines, regenerated in full
   (generic defaults ∪ layer-contributed ∪ `vendored_dirs`).
+- **`.gitleaks.toml`** — I3(b), `guards` only: `[extend] useDefault = true` plus a path
+  allowlist holding the same composed exclude set, translated to regex. The prek hook scans
+  the staged diff rather than a file list, so prek's own `exclude` cannot reach it — this
+  block is where a scaffolded project's exclusions actually take effect.
 
 ### `agentic` — different nature
 
@@ -151,7 +159,7 @@ vendored_dirs = ["vendor", "third_party"]
 4. Let the user select layers to add or update, enforcing the dependency chain.
 5. **Compose** each owned file and each I3(b) block from the manifest (applied layers +
    params) and rewrite it in full; apply the shared-file exception (I3) for `Makefile`,
-   `CLAUDE.md`, `SETUP_ENV.md`, `.gitignore` — creating any that are absent.
+   `CLAUDE.md`, `SETUP_ENV.md`, `.gitignore`, `.gitleaks.toml` — creating any that are absent.
 6. Rewrite the manifest.
 
 ## Parameters

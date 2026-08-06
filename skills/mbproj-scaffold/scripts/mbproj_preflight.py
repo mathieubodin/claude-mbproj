@@ -99,6 +99,8 @@ _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*\Z")
 # Words that carry no distinguishing meaning in a heading; dropping them is what lets
 # "When adding a feature" recognise itself in "When Adding Features".
 _STOPWORDS = frozenset({"a", "an", "the", "and", "or", "of", "to", "for", "in", "on", "with"})
+# A `[extend]` table header in `.gitleaks.toml`, wherever it sits in the file.
+_TOML_EXTEND = re.compile(r"^[ \t]*\[extend\]", re.M)
 
 
 def _logical_lines(text: str) -> list[str]:
@@ -294,6 +296,14 @@ def classify_shared(repo: Path, state: dict) -> list[dict]:
             elif path == ".gitignore":
                 lines = {ln.strip() for ln in text.splitlines()}
                 dupes = sorted(i for i in items if i in lines)
+                if dupes:
+                    row.update(status=DUPLICATE, findings=dupes)
+            elif path == ".gitleaks.toml":
+                # The one shared file where a duplicate is not merely redundant. TOML forbids
+                # redefining a table, so a hand-written `[extend]` beside the block's own makes
+                # the file stop parsing — and gitleaks then fails *every* commit, on a config
+                # error that reads nothing like the hand-written line that caused it.
+                dupes = ["[extend]"] if _TOML_EXTEND.search(text) else []
                 if dupes:
                     row.update(status=DUPLICATE, findings=dupes)
         rows.append(row)

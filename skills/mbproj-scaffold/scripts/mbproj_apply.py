@@ -86,6 +86,34 @@ def _glob_exclude(entry: str) -> str:
     return f"{e}/**" if _is_located(entry) else f"**/{e}/**"
 
 
+# Regex metacharacters that must survive as literals. `*` and `?` are absent on purpose:
+# they carry glob meaning and are translated, not escaped.
+_REGEX_META = frozenset(".^$+(){}[]|\\")
+
+
+def _regex_exclude(entry: str) -> str:
+    """Same rule as `_find_exclude`, in the regex syntax gitleaks path allowlists expect.
+
+    gitleaks matches paths with regexes, not globs, so this is a translation rather than a
+    reformat — and the trailing `/` is what makes it safe. Without it, the bare entry `.git`
+    would compile to a prefix matching `.github/`, and a token committed to a GitHub Actions
+    workflow would be allowlisted by the very entry meant to skip the object store.
+
+    Only `*` and `?` are given glob meaning; a character class is escaped to a literal rather
+    than translated. That knowingly diverges from `find` and markdownlint, and the direction
+    is the reason it is acceptable: an entry gitleaks fails to exclude is scanned, which costs
+    a false positive, where the reverse would cost a file silently left unscanned.
+    """
+    e = _bare(entry)
+    body = "".join(
+        "[^/]*" if c == "*" else "[^/]" if c == "?" else f"\\{c}" if c in _REGEX_META else c
+        for c in e
+    )
+    # A located entry said *where*, so it is anchored at the repo root; a bare name matches at
+    # any depth — the same distinction `_find_exclude` draws, spelled in regex.
+    return f"^{body}/" if _is_located(entry) else f"(^|/){body}/"
+
+
 def build_mk(state: dict) -> str:
     applied = _applied(state)
     # `check-dev-env` and `help` ship with every layer set: `help` backs .DEFAULT_GOAL, so it
@@ -168,10 +196,48 @@ def build_prek(state: dict) -> str:
         "[[repos]]\n"
         'repo = "local"\n'
         "hooks = [\n"
+        # gitleaks runs first, and blocks: a secret is the one finding whose cost survives the
+        # commit being amended, since the fix is a history rewrite plus a credential rotation.
+        # `--staged` scans the staged *diff*, not the tree, so prose already committed is never
+        # re-judged — which is what keeps a documentation-heavy repo from failing on its own
+        # past. `--verbose` is not decoration: without it the run reports a count and no
+        # location, leaving nothing to act on. `pass_filenames` is false because the command
+        # reads the diff itself; path exclusions therefore live in `.gitleaks.toml`, not in
+        # prek's `exclude` above.
+        '    { id = "gitleaks", name = "gitleaks", entry = "gitleaks git --staged --redact --no-banner --verbose", language = "system", pass_filenames = false },\n'
         '    { id = "lint", name = "make lint", entry = "make lint", language = "system", shell = "bash", pass_filenames = false },\n'
         '    { id = "commitlint", name = "commitlint", entry = "commitlint --edit", language = "system", stages = ["commit-msg"], pass_filenames = false },\n'
         "]\n"
     )
+
+
+def build_gitleaks(state: dict) -> str:
+    """The mbproj:managed body of `.gitleaks.toml` — extend directive plus path allowlist.
+
+    Unlike `prek.toml` this is a *shared* file (I3(b)), not an owned one, and the difference is
+    deliberate: the default catalogue carries no rule for every provider a project may use, so
+    a project has to be able to add its own `[[rules]]` and keep them across re-runs. Only the
+    block between the markers is regenerated.
+    """
+    lines = [
+        "# gitleaks (https://github.com/gitleaks/gitleaks) - Go, standalone, no Python.",
+        "# Run by prek at the pre-commit stage against the staged diff; see",
+        "# SETUP_ENV.md#gitleaks. Anything you write OUTSIDE these markers is yours and",
+        "# survives re-runs - project-specific [[rules]] belong there.",
+        "",
+        "[extend]",
+        "# Keep the default rule catalogue. Without this the mere existence of a",
+        "# .gitleaks.toml *replaces* it, and every provider rule silently stops matching -",
+        "# a scan that reports nothing because it is looking for nothing.",
+        "useDefault = true",
+        "",
+        "[[allowlists]]",
+        'description = "Vendored and generated paths, composed from the mbproj manifest"',
+        "paths = [",
+    ]
+    lines += [f"  '''{_regex_exclude(d)}'''," for d in compose_exclude_dirs(state)]
+    lines.append("]")
+    return "\n".join(lines) + "\n"
 
 
 def owned_plan(state: dict) -> dict[str, str]:
@@ -228,6 +294,15 @@ def shared_plan(state: dict) -> dict[str, dict]:
         ".gitignore": {
             "kind": "ignore lines",
             "items": [line for n in applied for line in LAYERS[n]["gitignore_lines"]],
+            "block_style": "hash",
+        },
+        ".gitleaks.toml": {
+            "kind": "allowlist paths",
+            "items": (
+                [_regex_exclude(d) for d in compose_exclude_dirs(state)]
+                if any(LAYERS[n]["owns_gitleaks_block"] for n in applied)
+                else []
+            ),
             "block_style": "hash",
         },
     }
@@ -417,6 +492,12 @@ def apply(
     if gi_lines:
         shared.ensure_block(
             repo / ".gitignore", "\n".join(gi_lines) + "\n", plan[".gitignore"]["block_style"]
+        )
+
+    # shared: .gitleaks.toml allowlist (b) — only when the layer owning the block is applied
+    if plan[".gitleaks.toml"]["items"]:
+        shared.ensure_block(
+            repo / ".gitleaks.toml", build_gitleaks(state), plan[".gitleaks.toml"]["block_style"]
         )
 
     manifest.write(repo, state)

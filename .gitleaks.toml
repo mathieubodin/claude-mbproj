@@ -1,0 +1,23 @@
+# >>> mbproj:managed (do not edit) >>>
+# gitleaks (https://github.com/gitleaks/gitleaks) - Go, standalone, no Python.
+# Run by prek at the pre-commit stage against the staged diff; see
+# SETUP_ENV.md#gitleaks. Anything you write OUTSIDE these markers is yours and
+# survives re-runs - project-specific [[rules]] belong there.
+
+[extend]
+# Keep the default rule catalogue. Without this the mere existence of a
+# .gitleaks.toml *replaces* it, and every provider rule silently stops matching -
+# a scan that reports nothing because it is looking for nothing.
+useDefault = true
+
+[[allowlists]]
+description = "Vendored and generated paths, composed from the mbproj manifest"
+paths = [
+  '''(^|/)\.git/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)\.idea/''',
+  '''(^|/)\.vscode/''',
+  '''^skills/mbproj-scaffold/templates/''',
+]
+# <<< mbproj:managed <<<

@@ -103,6 +103,7 @@ def _empty_layer() -> dict:
         "check_targets": [],
         "owns_markdownlint_config": False,
         "owns_prek_config": False,
+        "owns_gitleaks_block": False,
     }
 
 
@@ -131,7 +132,7 @@ LAYERS["lint_format"].update(
 
 _GUARDS_MK = _mk(
     """\
-install-hooks: _check_prek _check_commitlint ## Install git hooks (prek: pre-commit + commit-msg)
+install-hooks: _check_prek _check_commitlint _check_gitleaks ## Install git hooks (prek: pre-commit + commit-msg)
 <TAB>@hp=$$(git config --get core.hooksPath 2>/dev/null || true); \\
 <TAB>if [ -n "$$hp" ]; then git config --local core.hooksPath .git/hooks; fi; \\
 <TAB>prek install --hook-type pre-commit --hook-type commit-msg; rc=$$?; \\
@@ -143,17 +144,21 @@ _check_prek:
 
 _check_commitlint:
 <TAB>@command -v commitlint >/dev/null 2>&1 || { echo "commitlint not found - see SETUP_ENV.md#commitlint"; exit 1; }
+
+_check_gitleaks:
+<TAB>@command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not found - see SETUP_ENV.md#gitleaks"; exit 1; }
 """
 )
 
 LAYERS["guards"].update(
     {
         "owned": [("commitlint.config.js", "commitlint.config.js")],
-        "setup_env_sections": ["commitlint", "prek", "git-hooks"],
+        "setup_env_sections": ["commitlint", "prek", "gitleaks", "git-hooks"],
         "mk": _GUARDS_MK,
         "main_targets": ["install-hooks"],
-        "check_targets": ["_check_prek", "_check_commitlint"],
+        "check_targets": ["_check_prek", "_check_commitlint", "_check_gitleaks"],
         "owns_prek_config": True,
+        "owns_gitleaks_block": True,
     }
 )
 
