@@ -22,6 +22,7 @@ skills/mbproj-scaffold/
   SKILL.md               skill entry — orchestration (asks, applies, installs)
   scripts/               the deterministic engine (Python)
   templates/             the generic files the engine ships into target repos
+  tests/                 the verification suite behind `make test`
 docs/spine.md            authoritative design invariants (read this first)
 ```
 
@@ -49,7 +50,20 @@ Mechanical file output lives in Python, not in `SKILL.md` prose, because re-runs
 
 ## Testing a change
 
-Two things must hold for any change: the output is correct, and a second run changes nothing.
+Start with the verification suite — it is the non-regression net, and `make release` refuses
+to run without it:
+
+```bash
+make test
+```
+
+It builds a repository carrying every collision class, asserts the preflight names each one,
+that the engine refuses to write while conflicts stand, and that an unwritable path cannot be
+acknowledged past the gate; it also pins the parser behaviours and the exclude translations
+that an end-to-end fixture alone would not reach.
+
+Then two things must hold for any change: the output is correct, and a second run changes
+nothing.
 
 Apply to a throwaway repo and check idempotency:
 
@@ -70,10 +84,18 @@ diff /tmp/a /tmp/b && echo "idempotent"
 Then dogfood on this repository — it is the first non-regression test:
 
 ```bash
-python3 skills/mbproj-scaffold/scripts/mbproj_apply.py . --layer lint_format
+CLAUDE_PLUGIN_ROOT="$PWD" python3 skills/mbproj-scaffold/scripts/mbproj_apply.py . \
+  --layer lint_format --layer guards --layer changelog \
+  --project-name claude-mbproj \
+  --vendored-dir skills/mbproj-scaffold/templates
 git diff          # expected: empty, unless your change was meant to alter the output
 make lint
 ```
+
+Pass the repository's actual state — the three layers and both parameters, exactly as
+`.config/mbproj.toml` records them. Applying a subset rewrites the composed files from a
+smaller manifest, and the empty diff you are looking for turns into a diff that proves
+nothing. `scripts/release.sh` runs this same invocation when it re-applies the scaffold.
 
 When touching a shared-file mechanism, also verify against a repo that already has content in
 `Makefile`, `CLAUDE.md`, `.gitignore`, or `SETUP_ENV.md`: project-authored content must survive
@@ -106,8 +128,15 @@ once per clone:
 make install-hooks
 ```
 
-The `pre-commit` hook runs `make lint`; the `commit-msg` hook runs commitlint. `CHANGELOG.md`
-is generated — never hand-edit it; run `make changelog` instead.
+At the `pre-commit` stage prek runs four hygiene checks (trailing whitespace, end-of-file,
+line endings, merge-conflict markers), then `gitleaks` against the staged diff, then
+`make lint`. The `commit-msg` hook runs commitlint. `CHANGELOG.md` is generated — never
+hand-edit it; run `make changelog` instead.
+
+Gitleaks scans the staged diff rather than a file list, so prek's own `exclude` cannot reach
+it: what a scaffolded project excludes lives in the `.gitleaks.toml` managed block. See
+[`docs/solutions/tooling-decisions/gitleaks-precommit-secret-scanning.md`](docs/solutions/tooling-decisions/gitleaks-precommit-secret-scanning.md)
+for the failure modes that stay silent.
 
 ## Releasing
 
@@ -115,12 +144,13 @@ Two commands. The first does everything that can be undone, and stops. The secon
 only one that publishes.
 
 ```bash
-make release VERSION=0.2.2
+make release VERSION=X.Y.Z
 make publish
 ```
 
-`make release` refuses to start unless the working tree is clean, `main` matches
-`origin/main`, the two manifests already agree, and the new version moves **forward** — a
+`make release` refuses to start unless the working tree is clean, `main` is not **behind**
+`origin/main` (being ahead is the normal case — the commits being released are usually
+local), the two manifests already agree, and the new version moves **forward** — a
 release that regressed would hand a scaffolded project an older template than it already
 has. The target depends on `lint` and `test`, so neither can be skipped. It then bumps both
 manifests, re-applies the scaffold to this repository (whose own generated files carry the

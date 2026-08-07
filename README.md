@@ -18,14 +18,17 @@ run it.**
 
 You pick which layers to apply; each can be added later on a re-run.
 
-1. **Lint & format** — `.claude/rules/*.md`, a generic `mbproj.mk`
-   (`lint` / `build` / `clean` / `help` / `check-dev-env`), `.markdownlint-cli2.yaml`,
+1. **Lint & format** — `.claude/rules/*.md` and `.claude/mbproj/conventions.md`, a generic
+   `mbproj.mk` (`lint` / `build` / `package` / `clean`), `.markdownlint-cli2.yaml`,
    `.shellcheckrc`.
-2. **Git guards** — `prek.toml`, `commitlint.config.js`, an `install-hooks` target.
+2. **Git guards** — `prek.toml`, `commitlint.config.js`, a secret-scanning block in
+   `.gitleaks.toml`, and an `install-hooks` target.
 3. **Changelog** — `cliff.toml` + [git-cliff](https://git-cliff.org/) (`make changelog`).
    Depends on the guards layer.
 4. **Agentic workflow** — BMAD + compound-engineering setup and a CLAUDE.md
    "Agentic Workflow" section.
+
+Whichever layers you pick, `mbproj.mk` always carries `help` and `check-dev-env`.
 
 Applied layers and the plugin version are tracked in a `.config/mbproj.toml` manifest, so a
 re-run reads what is already installed and offers to add or update.
@@ -34,9 +37,13 @@ re-run reads what is already installed and offers to add or update.
 
 - **Idempotent & non-destructive** — a re-run never breaks existing files.
 - **Re-entrant by whole-file rewrite** — each config is a dedicated file rewritten in full;
-  the project `Makefile` delegates via `include mbproj.mk`. No managed in-file blocks.
-- **Generic only** — the plugin ships only reusable tooling; project-specific parameters
-  (project name, vendored dirs, tool set, project targets) are detected or asked for.
+  the project `Makefile` delegates via `include mbproj.mk`. Where a file offers no such
+  indirection (`.gitignore`, `SETUP_ENV.md`, `.gitleaks.toml`), the plugin owns a delimited
+  block inside it and regenerates that block whole — everything outside the markers is yours
+  and survives.
+- **Generic only** — the plugin ships only reusable tooling. The project name and the
+  vendored directories are detected or asked for; tool sets are fixed per layer, and
+  project-specific targets are out of scope entirely.
 
 ## Install
 
@@ -55,14 +62,22 @@ scaffold:
 
 ## Status
 
-v0.1.0 — all four layers are implemented. The lint/format, guards, and changelog layers are
-dogfooded on this repository: `make lint`, `make check-dev-env`, `make changelog`, and the
-git hooks all run here. The agentic layer is deliberately not applied here (this repo is a
-plugin, not a BMAD-developed project); it was verified end to end in a throwaway repo.
+All four layers are implemented. Released versions live in
+[`CHANGELOG.md`](CHANGELOG.md) — this page names none on purpose, so it cannot fall behind
+one.
+
+The lint/format, guards, and changelog layers are dogfooded on this repository: `make lint`,
+`make check-dev-env`, `make changelog`, and the git hooks all run here. The agentic layer is
+deliberately not applied here (this repo is a plugin, not a BMAD-developed project). Every
+change is validated on two grounds — a repository that already carries its own equivalents
+of what the plugin brings, and one that carries nothing at all — because they fail in
+different ways, so a change proven on one is not proven.
 
 ## Documentation
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — working on the plugin itself.
+- [`CONCEPTS.md`](CONCEPTS.md) — the vocabulary this page uses: owned and shared files,
+  layers, the manifest, the preflight.
 - [`docs/spine.md`](docs/spine.md) — the design spine (invariants, layers, manifest).
 - [`docs/adoption.md`](docs/adoption.md) — adopting the socle in a repo that already has
   tooling: what the preflight reports, and the migration it asks for.
