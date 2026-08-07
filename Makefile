@@ -11,5 +11,6 @@ release-abort: ## Undo a prepared release that has not been published
 
 test: ## Run the plugin verification suite
 	@python3 skills/mbproj-scaffold/tests/brownfield_check.py
+	@python3 skills/mbproj-scaffold/tests/docs_consistency.py
 
 .PHONY: publish release release-abort test
