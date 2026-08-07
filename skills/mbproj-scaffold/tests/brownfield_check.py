@@ -4,10 +4,13 @@
 Four things are checked, and the split matters — each covers what the others structurally
 cannot:
 
-- **The report, end to end.** Adopting the reference project by hand hit five classes of
-  conflict (`docs/adoption.md`); a repo carrying all five must have each one named. The fixture
+- **The report, end to end.** Adopting the reference project by hand hit every class of
+  conflict `docs/adoption.md` lists; a repo carrying them all must have each one named, by name
+  rather than by count — a count is what let the `.gitleaks.toml` case hide. The fixture
   is generated rather than committed, so it cannot drift from the layer registry it is written
-  against, and never has to be excluded from the lint that runs over this repo.
+  against, and never has to be excluded from the lint that runs over this repo. The rendered
+  text is pinned too, not only the dict behind it: a consequence the report never prints is a
+  consequence nobody acts on.
 - **The gate.** That it refuses, that an unwritable path cannot be acknowledged past it, and
   that the acknowledgement survives the next run.
 - **The parsers and the path translation, directly.** Every shape that once produced a wrong
@@ -177,7 +180,7 @@ def _row(report: dict, path: str) -> dict:
 
 
 def check_report(root: Path, fail) -> None:
-    """The five collision classes, each named by the report rather than merely counted."""
+    """Every collision class, each named by the report rather than merely counted."""
     report = preflight.report(root, LAYERS, project_name="reference")
 
     overwritten = {r["path"] for r in report["owned"] if r["status"] == preflight.OVERWRITE}
@@ -254,6 +257,43 @@ HEADING_FORMS = [
     ("after an unclosed fence", "```text\nopen\n\n## jq\n", ["jq"]),
     ("closed block above an unclosed one", "```text\n## jq\n```\n\n```text\nopen\n", []),
 ]
+
+
+def check_render(root: Path, fail) -> None:
+    """The rendered text, not only the dict behind it — that text is what a maintainer acts on.
+
+    The `.gitleaks.toml` duplicate earns a case of its own: it wears the same `duplicate` status
+    as a restated ignore line and costs every commit afterwards, so the rendered consequence is
+    the only thing between a maintainer and a repository that can no longer commit. It was
+    missing once, and nothing here noticed.
+    """
+    report = preflight.report(root, LAYERS, project_name="reference")
+    text = preflight.render(report)
+
+    if ".gitleaks.toml" not in text:
+        fail("the rendered report never names .gitleaks.toml")
+    if "fails every commit" not in text:
+        fail("the rendered report does not say what a .gitleaks.toml duplicate costs")
+    if "not editorial" not in text:
+        fail("the rendered report leaves the .gitleaks.toml finding filed as editorial")
+
+    # The other direction. A test that only pins the loud case passes just as happily on a
+    # report that shouts on every duplicate, which would put the harmless ones back under the
+    # harshest consequence — the exact grading mistake this wording exists to undo.
+    without = dict(report)
+    without["shared"] = [
+        dict(row, findings=[]) if row["path"] == ".gitleaks.toml" else row
+        for row in report["shared"]
+    ]
+    without["shared_finding_count"] = sum(len(r["findings"]) for r in without["shared"])
+    quiet = preflight.render(without)
+
+    if not without["shared_finding_count"]:
+        fail("fixture no longer carries a harmless shared finding: the negative case is vacuous")
+    if "not editorial" in quiet:
+        fail("the .gitleaks.toml warning fires when no such finding is present")
+    if "editorial call" not in quiet:
+        fail("the editorial wording is missing when only harmless duplicates remain")
 
 
 def check_parsers(fail) -> None:
@@ -505,6 +545,7 @@ def main() -> int:
         brownfield.mkdir()
         build_fixture(brownfield)
         check_report(brownfield, fail)
+        check_render(brownfield, fail)
 
         check_parsers(fail)
         check_allowlist_paths(fail)

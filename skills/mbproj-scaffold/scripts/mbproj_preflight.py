@@ -76,6 +76,23 @@ REVIEW = "review"  # prose that plausibly covers what the imports carry — a hu
 
 SHARED_FINDINGS = (DUPLICATE, COLLISION, REVIEW)
 
+# What a finding costs, per shared file. A property of the file, not of the status:
+# `duplicate` covers a tool section that turns the generated lint red, an ignore line that
+# costs nothing at all, and a `[extend]` that stops every later commit. Grading by status put
+# all three under one consequence — which is how the worst of them read as editorial.
+# Module-level so a test can hold it against the documentation: a shared file that can carry a
+# finding and says nothing about what it costs is the shape of defect this table exists for.
+SHARED_CONSEQUENCES = {
+    ".gitleaks.toml": (
+        "a second `[extend]`: TOML forbids restating a table, so the file stops "
+        "parsing and gitleaks then fails every commit — remove yours"
+    ),
+    "SETUP_ENV.md": "duplicated tool sections: `make lint` fails on them (MD024)",
+    "Makefile": "colliding targets: make warns, and the project's recipe wins (by design)",
+    ".gitignore": "restated ignore lines: redundant only — git and the lint both shrug",
+    "CLAUDE.md": "nominated headings: prose only you can compare — purely editorial",
+}
+
 UNREADABLE = "unreadable"  # a shared file applying cannot read, so applying stops there
 
 # Up to three *spaces* of indent, never a tab: in CommonMark a leading tab opens an indented
@@ -382,19 +399,17 @@ def render(result: dict) -> str:
             f"{result['shared_finding_count']} finding(s) in shared files. Nothing is lost "
             "there — mbproj adds to them — but the project would carry the same thing twice."
         )
-        # What "twice" costs is a property of the file, not of the status: `duplicate` covers
-        # both a tool section, which turns the generated lint red, and an ignore line, which
-        # costs nothing at all. Grading by status put the two under the harsher of the two
-        # consequences and claimed one that measurement does not support.
-        consequences = {
-            "SETUP_ENV.md": "duplicated tool sections: `make lint` fails on them (MD024)",
-            "Makefile": "colliding targets: make warns, and the project's recipe wins (by design)",
-            ".gitignore": "restated ignore lines: redundant only — git and the lint both shrug",
-            "CLAUDE.md": "nominated headings: prose only you can compare — purely editorial",
-        }
         seen = {r["path"] for r in result["shared"] if r["findings"]}
-        lines += [f"  - {text}" for path, text in consequences.items() if path in seen]
-        lines.append("Removing what is superseded is an editorial call, so it is left to you.")
+        lines += [f"  - {text}" for path, text in SHARED_CONSEQUENCES.items() if path in seen]
+        # Calling the whole family editorial is what invited the shrug: the gitleaks duplicate
+        # wears the same `duplicate` status as an ignore line and costs every later commit.
+        if ".gitleaks.toml" in seen:
+            lines.append(
+                "The .gitleaks.toml finding is not editorial — leave it and every later commit "
+                "fails. The rest is yours to judge."
+            )
+        else:
+            lines.append("Removing what is superseded is an editorial call, so it is left to you.")
     if not (result["conflict_count"] or result["blocked_count"]):
         lines.append("No hand-written file would be overwritten.")
     return "\n".join(lines)
